@@ -23,3 +23,13 @@ target
 /dist/
 /target/
 /Cargo.lock
+
+# Additional common ignores
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.env
+node_modules/
+.vscode/settings.json
+.idea/
