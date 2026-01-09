@@ -1,4 +1,5 @@
 use crate::components::layout::Layout;
+use crate::components::layout::OpenFolderButton;
 use leptos::prelude::*;
 use leptos::logging::log;
 
@@ -27,18 +28,24 @@ pub fn App() -> impl IntoView {
             <p class="text-slate-400 mb-8">
                 "Bienvenido al editor CodeDocs. Aquí podrás gestionar tus documentos Markdown."
             </p>
-             <div class="p-6 bg-white dark:bg-slate-900/50 border border-slate-800 dark:border-slate-800 rounded-xl shadow-2xl">
-                <p class="mb-4">"Clicks acumulados: " <span class="text-brand-blue font-mono">{count} - {base}</span></p>
+             <div class="p-6 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                <p class="mb-6 text-slate-600 dark:text-slate-400 font-medium">
+                    "Clicks acumulados: " 
+                    <span class="text-slate-900 dark:text-white font-mono font-bold text-lg ml-1">
+                        {count} <span class="text-xs text-slate-400 font-normal ml-2">"("{base}")"</span>
+                    </span>
+                </p>
                 <button 
                     on:click={move |_| {
                         set_count.update(|n| *n += 1);
                         set_base.update(|b| *b = validar_contador(count.get()));
                     }}
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded font-medium transition-all text-brand-orange hover:text-brand-orange/80"
+                    class="px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white rounded-md text-sm font-medium transition-colors"
                 >
                     "Incrementar Contador"
                 </button>
             </div>
+            <OpenFolderButton/>
         </div>
        </Layout>
     }
