@@ -1,7 +1,6 @@
 use crate::components::layout::Layout;
-use crate::components::layout::OpenFolderButton;
-use leptos::prelude::*;
 use leptos::logging::log;
+use leptos::prelude::*;
 
 pub fn validar_contador(count: i32) -> String {
     if count % 2 == 0 {
@@ -30,12 +29,12 @@ pub fn App() -> impl IntoView {
             </p>
              <div class="p-6 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
                 <p class="mb-6 text-slate-600 dark:text-slate-400 font-medium">
-                    "Clicks acumulados: " 
+                    "Clicks acumulados: "
                     <span class="text-slate-900 dark:text-white font-mono font-bold text-lg ml-1">
                         {count} <span class="text-xs text-slate-400 font-normal ml-2">"("{base}")"</span>
                     </span>
                 </p>
-                <button 
+                <button
                     on:click={move |_| {
                         set_count.update(|n| *n += 1);
                         set_base.update(|b| *b = validar_contador(count.get()));
@@ -45,7 +44,6 @@ pub fn App() -> impl IntoView {
                     "Incrementar Contador"
                 </button>
             </div>
-            <OpenFolderButton/>
         </div>
        </Layout>
     }
