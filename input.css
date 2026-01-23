@@ -47,12 +47,13 @@
   position: relative !important;
   padding: 1.5rem !important;
   background-color: #0f172a !important;
-  /* Slate 900 */
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 0.75rem !important;
   box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
   margin-top: 1.5rem !important;
   margin-bottom: 1.5rem !important;
+  overflow-x: auto !important;
+  /* Fix for code block overflow */
 }
 
 .prose pre code {
@@ -60,13 +61,193 @@
   font-size: 0.875rem !important;
   line-height: 1.7 !important;
   color: #f1f5f9 !important;
-  /* Slate 100 */
   background-color: transparent !important;
   padding: 0 !important;
+  display: block;
 }
 
 .dark .prose pre {
   background-color: #020617 !important;
-  /* Slate 950 */
   border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Table Styling */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  font-size: 0.9em;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.prose th {
+  background-color: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 15px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.dark .prose th {
+  background-color: #1e293b;
+  color: #f1f5f9;
+  border-bottom-color: #334155;
+}
+
+.prose td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dark .prose td {
+  border-bottom-color: #1e293b;
+}
+
+.prose tr:nth-child(even) {
+  background-color: #fcfcfc;
+}
+
+.dark .prose tr:nth-child(even) {
+  background-color: #0f172a / 30;
+}
+
+/* Checklist / Task List Styling */
+.prose ul li:has(input[type="checkbox"]) {
+  display: flex !important;
+  align-items: flex-start !important;
+  list-style-type: none !important;
+  padding-left: 0 !important;
+  white-space: normal !important;
+  /* Allow flex to manage space */
+}
+
+.prose ul li input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  margin-right: 0.75rem;
+  margin-top: 0.25rem;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dark .prose ul li input[type="checkbox"] {
+  border-color: #475569;
+  background-color: #1e293b;
+}
+
+.prose ul li input[type="checkbox"]:checked {
+  background-color: var(--brand-orange);
+  border-color: var(--brand-orange);
+}
+
+.prose ul li input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  color: white;
+  font-size: 0.8rem;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Callouts / Better Blockquotes */
+.prose blockquote {
+  border-left-width: 4px;
+  border-left-color: var(--brand-orange);
+  background-color: rgba(255, 183, 77, 0.05);
+  padding: 1rem 1.5rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: normal;
+  color: #475569;
+}
+
+.dark .prose blockquote {
+  background-color: rgba(255, 183, 77, 0.02);
+  color: #94a3b8;
+}
+
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none !important;
+}
+
+.prose blockquote strong:first-child {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--brand-orange);
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Fix for line breaks (Soft Wraps like GitHub) */
+.prose p {
+  white-space: pre-line;
+}
+
+.prose li:not(:has(input[type="checkbox"])) {
+  white-space: pre-line;
+}
+
+/* Ensure task list content still wraps correctly */
+.prose li:has(input[type="checkbox"])>* {
+  white-space: pre-line;
+}
+
+/* Force Heading Styles */
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  display: block !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  /* Slate 900 */
+  margin-top: 1.5em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.2 !important;
+}
+
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4 {
+  color: #f8fafc !important;
+  /* Slate 50 */
+}
+
+.prose h1 {
+  font-size: 2.25rem !important;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.3em;
+}
+
+.prose h2 {
+  font-size: 1.875rem !important;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.2em;
+}
+
+.prose h3 {
+  font-size: 1.5rem !important;
+}
+
+.prose h4 {
+  font-size: 1.25rem !important;
+}
+
+.dark .prose h1 {
+  border-bottom-color: #1e293b;
+}
+
+.dark .prose h2 {
+  border-bottom-color: rgba(15, 23, 42, 0.5);
 }

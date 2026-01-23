@@ -1,6 +1,7 @@
 use crate::components::modal::{AlertModal, DeleteConfirmModal, RenameConfirmModal};
 use crate::components::toolbar::TemplateToolbar;
-use crate::components::ui::{Button, FileEntry, FileTree};
+use crate::components::ui::{AppStatus, Button, FileEntry, FileTree};
+use crate::utils::env::is_tauri;
 use js_sys;
 use leptos::logging::error;
 use leptos::prelude::*;
@@ -21,6 +22,37 @@ pub fn OpenFolderButton(
 ) -> impl IntoView {
     let fn_open_folder = move |_: leptos::ev::MouseEvent| {
         spawn_local(async move {
+            if !is_tauri() {
+                set_path.set("C:\\Demo\\Documents".to_string());
+                let mock_files = vec![
+                    FileEntry {
+                        name: "Bienvenido.md".to_string(),
+                        path: "C:\\Demo\\Documents\\Bienvenido.md".to_string(),
+                        is_dir: false,
+                        children: vec![],
+                    },
+                    FileEntry {
+                        name: "Guía_Rápida.md".to_string(),
+                        path: "C:\\Demo\\Documents\\Guía_Rápida.md".to_string(),
+                        is_dir: false,
+                        children: vec![],
+                    },
+                    FileEntry {
+                        name: "Proyectos".to_string(),
+                        path: "C:\\Demo\\Documents\\Proyectos".to_string(),
+                        is_dir: true,
+                        children: vec![FileEntry {
+                            name: "Demo.md".to_string(),
+                            path: "C:\\Demo\\Documents\\Proyectos\\Demo.md".to_string(),
+                            is_dir: false,
+                            children: vec![],
+                        }],
+                    },
+                ];
+                set_files.set(mock_files);
+                return;
+            }
+
             let result = invoke("open_project_folder", JsValue::null()).await;
 
             match result {
@@ -82,6 +114,7 @@ pub fn OpenFolderButton(
 pub fn Layout() -> impl IntoView {
     let (path, set_path) = signal(String::from("No se ha seleccionado ninguna carpeta"));
     let (files, set_files) = signal(Vec::<FileEntry>::new());
+    let (selected_file, set_selected_file) = signal::<Option<String>>(None);
     let (editor_content, set_editor_content) = signal(String::new());
     let (preview_html, set_preview_html) = signal(String::new());
     let (show_editor, set_show_editor) = signal(false);
@@ -130,20 +163,27 @@ pub fn Layout() -> impl IntoView {
 
     // Effect to update preview when content changes
     Effect::new(move |_| {
-        let content = editor_content.get();
-        spawn_local(async move {
-            let args = js_sys::Object::new();
-            js_sys::Reflect::set(&args, &"content".into(), &JsValue::from(content)).unwrap();
-            let html = invoke("render_markdown", args.into()).await;
-            match html {
-                Ok(html_js) => {
-                    if let Some(html_str) = html_js.as_string() {
-                        set_preview_html.set(html_str);
-                    }
-                }
-                Err(_) => set_preview_html.set("<p>Error rendering markdown</p>".to_string()),
-            }
-        });
+        let mut content = editor_content.get();
+
+        // Simple Callout transformation (GitHub Alerts style)
+        content = content.replace("[!NOTE]", "**NOTE**");
+        content = content.replace("[!TIP]", "**TIP**");
+        content = content.replace("[!IMPORTANT]", "**IMPORTANT**");
+        content = content.replace("[!WARNING]", "**WARNING**");
+        content = content.replace("[!CAUTION]", "**CAUTION**");
+
+        let mut options = pulldown_cmark::Options::empty();
+        options.insert(pulldown_cmark::Options::ENABLE_TABLES);
+        options.insert(pulldown_cmark::Options::ENABLE_FOOTNOTES);
+        options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+        options.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
+        options.insert(pulldown_cmark::Options::ENABLE_SMART_PUNCTUATION);
+        options.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES);
+
+        let parser = pulldown_cmark::Parser::new_ext(&content, options);
+        let mut html_output = String::new();
+        pulldown_cmark::html::push_html(&mut html_output, parser);
+        set_preview_html.set(html_output);
     });
 
     let refresh_files = move || {
@@ -241,7 +281,17 @@ pub fn Layout() -> impl IntoView {
     };
 
     let on_file_click = Callback::new(move |full_path: String| {
+        set_selected_file.set(Some(full_path.clone()));
         spawn_local(async move {
+            if !is_tauri() {
+                let mock_content = match full_path.as_str() {
+                    "C:\\Demo\\Documents\\Bienvenido.md" => "# 👋 Bienvenido a CodeDocs\n\nEsta es una **demo interactiva** en la web.\n\n### Características:\n- Edición rápida\n- Previsualización en tiempo real\n- Soporte para plantillas",
+                    "C:\\Demo\\Documents\\Guía_Rápida.md" => "# ⚡ Guía Rápida\n\n1. Selecciona un archivo.\n2. Edita su contenido.\n3. Mira la preview a la derecha.",
+                    _ => "# 📂 Archivo Demo\n\nContenido de ejemplo para la versión web.",
+                };
+                set_editor_content.set(mock_content.to_string());
+                return;
+            }
             let args = js_sys::Object::new();
             js_sys::Reflect::set(&args, &"pathStr".into(), &JsValue::from(full_path)).unwrap();
             let content = invoke("read_file", args.into()).await;
@@ -296,18 +346,28 @@ pub fn Layout() -> impl IntoView {
                         </h1>
                     </div>
 
+                    <div class="mb-6">
+                        <AppStatus />
+                    </div>
+
                     <div class="flex flex-col gap-2">
                         <h2 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">
                             "Explorador"
                         </h2>
                         <OpenFolderButton set_files=set_files set_path=set_path/>
-                        <button
-                            class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-medium transition-all"
-                            on:click=create_new_file
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                            "Nuevo Archivo"
-                        </button>
+                        {if is_tauri() {
+                             view! {
+                                <button
+                                    class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-medium transition-all"
+                                    on:click=create_new_file
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                                    "Nuevo Archivo"
+                                </button>
+                             }.into_any()
+                        } else {
+                            ().into_any()
+                        }}
                     </div>
                 </div>
 
@@ -357,6 +417,38 @@ pub fn Layout() -> impl IntoView {
                             {move || if show_editor.get() { "Ocultar Editor" } else { "Editar" }}
                         </button>
 
+                        // Save Button
+                        <button
+                            class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed group relative"
+                            disabled=move || !is_tauri()
+                            title=move || if is_tauri() { "Guardar cambios" } else { "Guardado directo deshabilitado en versión web" }
+                            on:click=move |_| {
+                                if let Some(file_path) = selected_file.get() {
+                                    let content = editor_content.get();
+                                    spawn_local(async move {
+                                        let args = js_sys::Object::new();
+                                        js_sys::Reflect::set(&args, &"pathStr".into(), &JsValue::from(file_path)).unwrap();
+                                        js_sys::Reflect::set(&args, &"content".into(), &JsValue::from(content)).unwrap();
+                                        let _ = invoke("save_file", args.into()).await;
+                                    });
+                                }
+                            }
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                            "Guardar"
+                            {move || if !is_tauri() {
+                                view! {
+                                    <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                        "Guardado directo deshabilitado en versión web"
+                                    </span>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+                        </button>
+
                          <button
                             class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all group"
                             title="Limpiar editor"
@@ -402,7 +494,7 @@ pub fn Layout() -> impl IntoView {
                         <div class="absolute top-4 right-4 text-[10px] font-mono text-slate-300 dark:text-slate-700 pointer-events-none group-hover:opacity-100 opacity-0 transition-opacity">
                             "PREVIEW"
                         </div>
-                        <div class="flex-1 overflow-y-auto p-8 custom-scrollbar overflow-x-hidden">
+                        <div class="flex-1 overflow-y-auto p-8 custom-scrollbar overflow-x-auto">
                             <div
                                 class="prose dark:prose-invert prose-slate max-w-none break-words
                                        prose-headings:font-bold prose-h1:text-3xl prose-h1:mb-6

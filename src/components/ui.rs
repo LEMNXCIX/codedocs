@@ -1,4 +1,28 @@
+use crate::utils::env::is_tauri;
 use leptos::prelude::*;
+
+#[component]
+pub fn AppStatus() -> impl IntoView {
+    let mode_label = if is_tauri() {
+        "Escritorio (Nativo)"
+    } else {
+        "Web (Demo Mode)"
+    };
+    let dot_color = if is_tauri() {
+        "bg-green-500"
+    } else {
+        "bg-amber-500"
+    };
+
+    view! {
+        <div class="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
+            <span class=format!("w-2 h-2 rounded-full {}", dot_color)></span>
+            <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">
+                {mode_label}
+            </span>
+        </div>
+    }
+}
 
 #[component]
 pub fn Button(
@@ -61,7 +85,7 @@ pub fn TreeItem(
                 <span class="truncate text-slate-700 dark:text-slate-300 flex-1">
                     {item.name.clone()}
                 </span>
-                {if !item.is_dir {
+                {if !item.is_dir && is_tauri() {
                     let path_del = item.path.clone();
                     let path_ren = item.path.clone();
                     view! {
