@@ -1,3 +1,5 @@
+use crate::components::modal::{AlertModal, DeleteConfirmModal, RenameConfirmModal};
+use crate::components::toolbar::TemplateToolbar;
 use crate::components::ui::{Button, FileEntry, FileTree};
 use js_sys;
 use leptos::logging::error;
@@ -89,6 +91,12 @@ pub fn Layout() -> impl IntoView {
     let (editor_ratio, set_editor_ratio) = signal(0.5);
     let (is_resizing_sidebar, set_is_resizing_sidebar) = signal(false);
     let (is_resizing_editor, set_is_resizing_editor) = signal(false);
+    let editor_ref = NodeRef::<leptos::html::Textarea>::new();
+
+    // Modal State
+    let (file_to_delete, set_file_to_delete) = signal::<Option<String>>(None);
+    let (file_to_rename, set_file_to_rename) = signal::<Option<String>>(None);
+    let (show_clear_confirm, set_show_clear_confirm) = signal(false);
 
     // Global Mouse Handlers for Resizing
     let _ = window_event_listener(leptos::ev::mousemove, move |ev: leptos::ev::MouseEvent| {
@@ -138,6 +146,100 @@ pub fn Layout() -> impl IntoView {
         });
     });
 
+    let refresh_files = move || {
+        let current_path = path.get();
+        if current_path != "No se ha seleccionado ninguna carpeta" {
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                js_sys::Reflect::set(&args, &"folderPath".into(), &JsValue::from(current_path))
+                    .unwrap();
+                let files_result = invoke("list_markdown_files", args.into()).await;
+                if let Ok(files_js) = files_result {
+                    if let Ok(tree) = serde_wasm_bindgen::from_value::<Vec<FileEntry>>(files_js) {
+                        set_files.set(tree);
+                    }
+                }
+            });
+        }
+    };
+
+    let on_delete_request = Callback::new(move |file_path: String| {
+        set_file_to_delete.set(Some(file_path));
+    });
+
+    let on_rename_request = Callback::new(move |file_path: String| {
+        set_file_to_rename.set(Some(file_path));
+    });
+
+    let handle_delete_confirm = move |_| {
+        if let Some(file_path) = file_to_delete.get() {
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                js_sys::Reflect::set(&args, &"pathStr".into(), &JsValue::from(file_path.clone()))
+                    .unwrap();
+                let result = invoke("delete_file", args.into()).await;
+                match result {
+                    Ok(_) => {
+                        set_file_to_delete.set(None);
+                        refresh_files();
+                    }
+                    Err(err) => {
+                        error!("Error deleting file: {:?}", err);
+                    }
+                }
+            });
+        }
+    };
+
+    let handle_rename_confirm = move |new_name: String| {
+        if let Some(old_path) = file_to_rename.get() {
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                js_sys::Reflect::set(&args, &"oldPath".into(), &JsValue::from(old_path.clone()))
+                    .unwrap();
+                js_sys::Reflect::set(&args, &"newName".into(), &JsValue::from(new_name)).unwrap();
+                let result = invoke("rename_file", args.into()).await;
+                match result {
+                    Ok(_) => {
+                        set_file_to_rename.set(None);
+                        refresh_files();
+                    }
+                    Err(err) => {
+                        error!("Error renaming file: {:?}", err);
+                    }
+                }
+            });
+        }
+    };
+
+    let create_new_file = move |_| {
+        let current_path = path.get();
+        if current_path != "No se ha seleccionado ninguna carpeta" {
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                js_sys::Reflect::set(
+                    &args,
+                    &"folderPath".into(),
+                    &JsValue::from(current_path.clone()),
+                )
+                .unwrap();
+                js_sys::Reflect::set(&args, &"name".into(), &JsValue::from("Nuevo_Documento.md")) // Placeholder name
+                    .unwrap();
+                let result = invoke("create_file", args.into()).await;
+                match result {
+                    Ok(new_path_js) => {
+                        refresh_files();
+                        if let Some(new_path) = new_path_js.as_string() {
+                            // Optionally open it
+                            leptos::logging::log!("Created: {}", new_path);
+                        }
+                    }
+                    Err(err) => error!("Error creating file: {:?}", err),
+                }
+            });
+        }
+    };
+
     let on_file_click = Callback::new(move |full_path: String| {
         spawn_local(async move {
             let args = js_sys::Object::new();
@@ -157,13 +259,12 @@ pub fn Layout() -> impl IntoView {
     });
 
     let clear_editor = move |_| {
-        let window = web_sys::window().unwrap();
-        if window
-            .confirm_with_message("¿Estás seguro de que quieres limpiar el editor?")
-            .unwrap_or(false)
-        {
-            set_editor_content.set(String::new());
-        }
+        set_show_clear_confirm.set(true);
+    };
+
+    let handle_clear_confirm = move |_| {
+        set_editor_content.set(String::new());
+        set_show_clear_confirm.set(false);
     };
 
     view! {
@@ -190,15 +291,24 @@ pub fn Layout() -> impl IntoView {
                             <path d="m290 130-70 252" stroke="#ffb74d" stroke-width="45" stroke-linecap="round"/>
                             <path d="m402 176-80 80 80 80" stroke="#4fc3f7" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-gray-100 italic">
+                        <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-gray-100">
                             "CodeDocs"
                         </h1>
                     </div>
 
-                    <h2 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4 px-1">
-                        "Explorador"
-                    </h2>
-                    <OpenFolderButton set_files=set_files set_path=set_path/>
+                    <div class="flex flex-col gap-2">
+                        <h2 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">
+                            "Explorador"
+                        </h2>
+                        <OpenFolderButton set_files=set_files set_path=set_path/>
+                        <button
+                            class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-medium transition-all"
+                            on:click=create_new_file
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                            "Nuevo Archivo"
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -207,7 +317,7 @@ pub fn Layout() -> impl IntoView {
                             {move || path.get()}
                         </p>
                     </div>
-                    <FileTree items=files on_click=on_file_click/>
+                    <FileTree items=files on_click=on_file_click on_delete=on_delete_request on_rename=on_rename_request />
                 </div>
             </aside>
 
@@ -217,8 +327,8 @@ pub fn Layout() -> impl IntoView {
                 on:mousedown=move |_| set_is_resizing_sidebar.set(true)
             />
 
-            // Main Content Area
             <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-brand-dark overflow-hidden">
+                <TemplateToolbar content=editor_content set_content=set_editor_content editor_ref=editor_ref />
                 <div class="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 bg-white dark:bg-brand-dark/50 backdrop-blur-md z-10">
                     <div class="flex items-center gap-4">
                         <span class="text-sm font-medium text-slate-500 dark:text-slate-400">{move || if show_editor.get() { "Markdown Editor" } else { "Markdown Viewer" }}</span>
@@ -270,9 +380,10 @@ pub fn Layout() -> impl IntoView {
                                     "EDITOR"
                                 </div>
                                 <textarea
+                                    node_ref=editor_ref
                                     class="flex-1 w-full p-8 bg-transparent focus:outline-none resize-none font-mono text-sm leading-relaxed text-slate-700 dark:text-slate-300 selection:bg-brand-orange/20 custom-scrollbar whitespace-pre-wrap break-words"
                                     placeholder="Empieza a escribir aquí..."
-                                    prop:value=editor_content
+                                    prop:value=move || editor_content.get()
                                     on:input=move |ev| set_editor_content.set(event_target_value(&ev))
                                 ></textarea>
                             </div>
@@ -306,6 +417,39 @@ pub fn Layout() -> impl IntoView {
                     </div>
                 </div>
             </main>
+
+            {move || file_to_delete.get().map(|path| {
+                view! {
+                    <DeleteConfirmModal
+                        path=path
+                        on_confirm=Callback::new(handle_delete_confirm)
+                        on_cancel=Callback::new(move |_| set_file_to_delete.set(None))
+                    />
+                }
+            })}
+
+            {move || file_to_rename.get().map(|path| {
+                view! {
+                    <RenameConfirmModal
+                        path=path
+                        on_confirm=Callback::new(handle_rename_confirm)
+                        on_cancel=Callback::new(move |_| set_file_to_rename.set(None))
+                    />
+                }
+            })}
+
+            {move || if show_clear_confirm.get() {
+                view! {
+                    <AlertModal
+                        title="Limpiar editor".to_string()
+                        message="¿Estás seguro de que quieres limpiar todo el contenido? Esta acción no se puede deshacer.".to_string()
+                        on_confirm=Callback::new(handle_clear_confirm)
+                        on_cancel=Callback::new(move |_| set_show_clear_confirm.set(false))
+                    />
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
         </div>
     }
 }

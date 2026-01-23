@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::{self, Path},
-};
+use std::{fs, path::Path};
 
 use pulldown_cmark::{html, Parser};
 use tauri_plugin_dialog::DialogExt;
@@ -111,4 +108,37 @@ pub fn render_markdown(content: String) -> String {
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
     html_output
+}
+
+#[tauri::command]
+pub fn generate_toc(content: String) -> String {
+    crate::utils::md::generate_toc(&content)
+}
+
+#[tauri::command]
+pub fn delete_file(path_str: String) -> Result<(), String> {
+    let path = Path::new(&path_str);
+    fs::remove_file(path).map_err(|e| format!("Error al eliminar el archivo: {}", e))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
+    let old_path_buf = Path::new(&old_path);
+    let parent = old_path_buf
+        .parent()
+        .ok_or("No se pudo determinar la carpeta padre")?;
+    let new_path = parent.join(new_name);
+
+    fs::rename(old_path_buf, new_path).map_err(|e| format!("Error al renombrar el archivo: {}", e))
+}
+
+#[tauri::command]
+pub fn create_file(folder_path: String, name: String) -> Result<String, String> {
+    let path = Path::new(&folder_path).join(name);
+    if path.exists() {
+        return Err("El archivo ya existe".to_string());
+    }
+    fs::write(&path, "# Nuevo Archivo\n")
+        .map_err(|e| format!("Error al crear el archivo: {}", e))?;
+    Ok(path.to_string_lossy().into_owned())
 }

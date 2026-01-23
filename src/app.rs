@@ -1,5 +1,4 @@
 use crate::components::layout::Layout;
-use leptos::logging::log;
 use leptos::prelude::*;
 
 #[component]
