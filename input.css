@@ -249,5 +249,40 @@
 }
 
 .dark .prose h2 {
-  border-bottom-color: rgba(15, 23, 42, 0.5);
+    border-bottom-color: rgba(15, 23, 42, 0.5);
+}
+
+/* CodeMirror 6 Container Styles */
+.codemirror-container .cm-editor {
+    height: 100%;
+    font-size: 14px;
+}
+
+.codemirror-container .cm-editor .cm-scroller {
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.codemirror-container .cm-editor .cm-content {
+    padding: 2rem;
+}
+
+.codemirror-container .cm-editor .cm-gutters {
+    border-right: 1px solid #e2e8f0;
+}
+
+.dark .codemirror-container .cm-editor .cm-gutters {
+    border-right-color: #1e293b;
+}
+
+.codemirror-container .cm-editor .cm-focused {
+    outline: none !important;
+}
+
+.codemirror-container .cm-editor .cm-activeLineGutter {
+    background-color: rgba(255, 183, 77, 0.05);
+}
+
+.codemirror-container .cm-editor .cm-activeLine {
+    background-color: rgba(255, 183, 77, 0.03);
 }

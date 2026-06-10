@@ -2,7 +2,7 @@
 target = "./index.html"
 
 [watch]
-ignore = ["./src-tauri"]
+ignore = ["./src-tauri", "./styles.css", "./public/codemirror-bridge.js"]
 
 [serve]
 port = 1425
@@ -12,3 +12,8 @@ open = false
 stage = "pre_build"
 command = "./node_modules/.bin/tailwindcss.cmd"
 command_arguments = ["-i", "./input.css", "-o", "./styles.css"]
+
+[[hooks]]
+stage = "pre_build"
+command = "./node_modules/.bin/esbuild.cmd"
+command_arguments = ["js/codemirror-bridge.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/codemirror-bridge.js", "--minify"]

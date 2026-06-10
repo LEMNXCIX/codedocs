@@ -1,70 +1,78 @@
 use crate::utils::env::is_tauri;
-use crate::utils::tauri_bridge::{self, invoke};
 use crate::components::toolbar::TemplateToolbar;
+use crate::components::layout::ViewMode;
 use leptos::prelude::*;
-use leptos::reactive::spawn_local;
-use wasm_bindgen::JsValue;
 
 #[component]
 pub fn EditorHeader(
     editor_content: ReadSignal<String>,
     set_editor_content: WriteSignal<String>,
     editor_ref: NodeRef<leptos::html::Textarea>,
-    show_editor: ReadSignal<bool>,
-    set_show_editor: WriteSignal<bool>,
+    view_mode: ReadSignal<ViewMode>,
+    set_view_mode: WriteSignal<ViewMode>,
     selected_file: ReadSignal<Option<String>>,
     on_clear: Callback<()>,
+    on_save: Callback<()>,
 ) -> impl IntoView {
+    let _ = selected_file;
     view! {
         <TemplateToolbar content=editor_content set_content=set_editor_content editor_ref=editor_ref />
         <div class="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 bg-white dark:bg-brand-dark/50 backdrop-blur-md z-10">
             <div class="flex items-center gap-4">
-                <span class="text-sm font-medium text-slate-500 dark:text-slate-400">
-                    {move || if show_editor.get() { "Markdown Editor" } else { "Markdown Viewer" }}
-                </span>
+                <div class="flex gap-0.5 bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5">
+                    <button
+                        class=move || format!(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all {}",
+                            if view_mode.get() == ViewMode::Source {
+                                "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                            } else {
+                                "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                            }
+                        )
+                        on:click=move |_| set_view_mode.set(ViewMode::Source)
+                    >
+                        "Fuente"
+                    </button>
+                    <button
+                        class=move || format!(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all {}",
+                            if view_mode.get() == ViewMode::Live {
+                                "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                            } else {
+                                "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                            }
+                        )
+                        on:click=move |_| set_view_mode.set(ViewMode::Live)
+                    >
+                        "En vivo"
+                    </button>
+                    <button
+                        class=move || format!(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all {}",
+                            if view_mode.get() == ViewMode::Reader {
+                                "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                            } else {
+                                "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                            }
+                        )
+                        on:click=move |_| set_view_mode.set(ViewMode::Reader)
+                    >
+                        "Lector"
+                    </button>
+                </div>
                 <div class="h-4 w-px bg-slate-200 dark:border-slate-800"></div>
                 <span class="text-xs font-mono text-brand-orange">
-                    {move || if editor_content.get().is_empty() { "Empty" } else { "Document Loaded" }}
+                    {move || if editor_content.get().is_empty() { "Vacío" } else { "Documento cargado" }}
                 </span>
             </div>
             <div class="flex items-center gap-2">
                 <button
-                    class=move || format!(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all {}",
-                        if show_editor.get() {
-                            "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                        } else {
-                            "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                        }
-                    )
-                    on:click=move |_| set_show_editor.update(|v| *v = !*v)
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                    {move || if show_editor.get() { "Ocultar Editor" } else { "Editar" }}
-                </button>
-
-                <button
                     class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed group relative"
                     disabled=move || !is_tauri()
                     title=move || if is_tauri() { "Guardar cambios" } else { "Guardado directo deshabilitado en versión web" }
-                    on:click=move |_| {
-                        if let Some(file_path) = selected_file.get() {
-                            let content = editor_content.get();
-                            spawn_local(async move {
-                                let args = js_sys::Object::new();
-                                tauri_bridge::set_arg(&args, "pathStr", JsValue::from(file_path));
-                                tauri_bridge::set_arg(&args, "content", JsValue::from(content));
-                                let _ = invoke("save_file", args.into()).await;
-                            });
-                        }
-                    }
+                    on:click=move |_| on_save.run(())
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                     "Guardar"
                     {move || if !is_tauri() {
                         view! {
@@ -73,12 +81,12 @@ pub fn EditorHeader(
                             </span>
                         }.into_any()
                     } else {
-                        ().into_any()
+                        view! { <div></div> }.into_any()
                     }}
                 </button>
 
                 <button
-                    class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all group"
+                    class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all"
                     title="Limpiar editor"
                     on:click=move |_| on_clear.run(())
                 >

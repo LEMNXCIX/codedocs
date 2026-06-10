@@ -4,11 +4,19 @@ use crate::components::editor::EditorPane;
 use crate::components::header::EditorHeader;
 use crate::types::FileEntry;
 use crate::utils::env::is_tauri;
+use crate::utils::markdown::{extract_headings, render_markdown, Heading};
 use crate::utils::tauri_bridge::{self, invoke};
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 use leptos::logging::error;
 use leptos::prelude::*;
 use leptos::reactive::spawn_local;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ViewMode {
+    Source,
+    Live,
+    Reader,
+}
 
 #[component]
 pub fn Layout() -> impl IntoView {
@@ -17,7 +25,10 @@ pub fn Layout() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
     let (editor_content, set_editor_content) = signal(String::new());
     let (preview_html, set_preview_html) = signal(String::new());
-    let (show_editor, set_show_editor) = signal(false);
+    let (view_mode, set_view_mode) = signal(ViewMode::Live);
+    let is_saving = RwSignal::new(false);
+    let is_loading_file = RwSignal::new(false);
+    let (headings, set_headings) = signal(Vec::<Heading>::new());
 
     let (sidebar_width, set_sidebar_width) = signal(280.0);
     let (editor_ratio, set_editor_ratio) = signal(0.5);
@@ -58,27 +69,46 @@ pub fn Layout() -> impl IntoView {
         set_is_resizing_editor.set(false);
     });
 
+    let _ = window_event_listener(leptos::ev::keydown, move |ev: leptos::ev::KeyboardEvent| {
+        let key = ev.key();
+        let ctrl = ev.ctrl_key() || ev.meta_key();
+        if ctrl && key == "1" {
+            ev.prevent_default();
+            set_view_mode.set(ViewMode::Source);
+        } else if ctrl && key == "2" {
+            ev.prevent_default();
+            set_view_mode.set(ViewMode::Live);
+        } else if ctrl && key == "3" {
+            ev.prevent_default();
+            set_view_mode.set(ViewMode::Reader);
+        }
+    });
+
     Effect::new(move |_| {
-        let mut content = editor_content.get();
-
-        content = content.replace("[!NOTE]", "**NOTE**");
-        content = content.replace("[!TIP]", "**TIP**");
-        content = content.replace("[!IMPORTANT]", "**IMPORTANT**");
-        content = content.replace("[!WARNING]", "**WARNING**");
-        content = content.replace("[!CAUTION]", "**CAUTION**");
-
-        let mut options = pulldown_cmark::Options::empty();
-        options.insert(pulldown_cmark::Options::ENABLE_TABLES);
-        options.insert(pulldown_cmark::Options::ENABLE_FOOTNOTES);
-        options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
-        options.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
-        options.insert(pulldown_cmark::Options::ENABLE_SMART_PUNCTUATION);
-        options.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES);
-
-        let parser = pulldown_cmark::Parser::new_ext(&content, options);
-        let mut html_output = String::new();
-        pulldown_cmark::html::push_html(&mut html_output, parser);
+        let content = editor_content.get();
+        let html_output = render_markdown(&content);
         set_preview_html.set(html_output);
+        set_headings.set(extract_headings(&content));
+
+        spawn_local(async move {
+            if let Some(window) = web_sys::window() {
+                let _ = js_sys::Reflect::get(&window, &JsValue::from_str("__codedocs_render_enhancements"))
+                    .ok()
+                    .and_then(|f| js_sys::Function::from(f).call0(&window).ok());
+            }
+        });
+    });
+
+    Effect::new(move |_| {
+        let current_path = path.get();
+        if current_path == "No se ha seleccionado ninguna carpeta" || !is_tauri() {
+            return;
+        }
+        let fp = current_path.clone();
+        spawn_local(async move {
+            let args = tauri_bridge::args_with("folderPath", &fp);
+            let _ = invoke("watch_folder", args).await;
+        });
     });
 
     let refresh_files = move || {
@@ -95,6 +125,46 @@ pub fn Layout() -> impl IntoView {
             });
         }
     };
+
+    {
+        let set_editor_content = set_editor_content.clone();
+        let selected_file = selected_file.clone();
+        let refresh_files_ref = refresh_files.clone();
+        let is_saving = is_saving.clone();
+
+        let on_fs_change = wasm_bindgen::closure::Closure::<dyn Fn(JsValue)>::new(
+            move |event: JsValue| {
+                if is_saving.get() {
+                    return;
+                }
+                if let Some(payload) = js_sys::Reflect::get(&event, &JsValue::from_str("payload")).ok() {
+                    if let Some(changed_paths) = payload.as_string() {
+                        let current_file = selected_file.get();
+                        if let Some(ref current) = current_file {
+                            if changed_paths.contains(current) {
+                                let fp = current.clone();
+                                let set_ec = set_editor_content.clone();
+                                spawn_local(async move {
+                                    let args = tauri_bridge::args_with("pathStr", &fp);
+                                    if let Ok(content_js) = invoke("read_file", args).await {
+                                        if let Some(content) = content_js.as_string() {
+                                            set_ec.set(content);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        refresh_files_ref();
+                    }
+                }
+            },
+        );
+
+        spawn_local(async move {
+            tauri_bridge::listen("fs-change", on_fs_change.as_ref().unchecked_ref()).await;
+            on_fs_change.forget();
+        });
+    }
 
     let on_delete_request = Callback::new(move |file_path: String| {
         set_file_to_delete.set(Some(file_path));
@@ -163,7 +233,71 @@ let create_new_file = Callback::new(move |_| {
     }
 });
 
+    let on_save = Callback::new(move |_| {
+        if let Some(file_path) = selected_file.get() {
+            if is_tauri() {
+                let content = editor_content.get();
+                is_saving.set(true);
+                spawn_local(async move {
+                    let args = js_sys::Object::new();
+                    tauri_bridge::set_arg(&args, "pathStr", JsValue::from(file_path));
+                    tauri_bridge::set_arg(&args, "content", JsValue::from(content));
+                    let _ = invoke("save_file", args.into()).await;
+                    is_saving.set(false);
+                });
+            }
+        }
+    });
+
+    let (auto_save_timer_id, set_auto_save_timer_id) = signal::<Option<i32>>(None);
+
+    Effect::new(move |_| {
+        let content = editor_content.get();
+        let file_path = selected_file.get();
+        if !is_tauri() || is_loading_file.get() {
+            return;
+        }
+        let Some(fp) = file_path else { return };
+
+        if let Some(id) = auto_save_timer_id.get_untracked() {
+            if let Some(window) = web_sys::window() {
+                let _ = window.clear_timeout_with_handle(id);
+            }
+        }
+
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+
+        let content_clone = content.clone();
+        let fp_clone = fp.clone();
+        let is_saving_clone = is_saving.clone();
+        let closure = wasm_bindgen::closure::Closure::once(move || {
+            is_saving_clone.set(true);
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                tauri_bridge::set_arg(&args, "pathStr", JsValue::from(fp_clone));
+                tauri_bridge::set_arg(&args, "content", JsValue::from(content_clone));
+                let _ = invoke("save_file", args.into()).await;
+                leptos::logging::log!("Auto-guardado");
+                is_saving_clone.set(false);
+            });
+        });
+
+        let id = window
+            .set_timeout_with_callback_and_timeout_and_arguments_0(
+                closure.as_ref().unchecked_ref(),
+                2000,
+            )
+            .unwrap_or(0);
+        closure.forget();
+        set_auto_save_timer_id.set(Some(id));
+    });
+
     let on_file_click = Callback::new(move |full_path: String| {
+        leptos::logging::log!("on_file_click: {}", full_path);
+        is_loading_file.set(true);
         set_selected_file.set(Some(full_path.clone()));
         spawn_local(async move {
             if !is_tauri() {
@@ -173,20 +307,28 @@ let create_new_file = Callback::new(move |_| {
                     _ => "# 📂 Archivo Demo\n\nContenido de ejemplo para la versión web.",
                 };
                 set_editor_content.set(mock_content.to_string());
+                is_loading_file.set(false);
                 return;
             }
-                let args = tauri_bridge::args_with("pathStr", &full_path);
+            leptos::logging::log!("Leyendo archivo: {}", full_path);
+            let args = tauri_bridge::args_with("pathStr", &full_path);
             let content = invoke("read_file", args).await;
+            leptos::logging::log!("read_file resultado: {:?}", content.as_ref().map(|v| v.as_string().map(|s| s.len())));
             match content {
                 Ok(content_js) => {
                     if let Some(content_str) = content_js.as_string() {
+                        leptos::logging::log!("Contenido cargado: {} chars", content_str.len());
                         set_editor_content.set(content_str);
+                    } else {
+                        leptos::logging::log!("WARN: read_file devolvió non-string");
                     }
                 }
                 Err(err) => {
                     error!("Error reading file: {:?}", err);
                 }
             }
+            is_loading_file.set(false);
+            leptos::logging::log!("is_loading_file = false");
         });
     });
 
@@ -212,8 +354,9 @@ let create_new_file = Callback::new(move |_| {
         sidebar_width=sidebar_width
         on_file_click=on_file_click
         on_delete=on_delete_request
-        on_rename=on_rename_request
-        create_new_file=create_new_file
+                on_rename=on_rename_request
+                create_new_file=create_new_file
+                headings=headings
         />
 
             // Resizer Sidebar
@@ -223,25 +366,26 @@ let create_new_file = Callback::new(move |_| {
             />
 
             <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-brand-dark overflow-hidden">
-                <EditorHeader
-                    editor_content=editor_content
-                    set_editor_content=set_editor_content
-                    editor_ref=editor_ref
-                    show_editor=show_editor
-                    set_show_editor=set_show_editor
-                    selected_file=selected_file
-                    on_clear=clear_editor
-                />
+            <EditorHeader
+                editor_content=editor_content
+                set_editor_content=set_editor_content
+                editor_ref=editor_ref
+                view_mode=view_mode
+                set_view_mode=set_view_mode
+                selected_file=selected_file
+                on_clear=clear_editor
+                on_save=on_save
+            />
 
-                <EditorPane
-                    editor_content=editor_content
-                    set_editor_content=set_editor_content
-                    preview_html=preview_html
-                    show_editor=show_editor
-                    editor_ratio=editor_ratio
-                    set_is_resizing_editor=set_is_resizing_editor
-                    editor_ref=editor_ref
-                />
+            <EditorPane
+                editor_content=editor_content
+            set_editor_content=set_editor_content
+                preview_html=preview_html
+                view_mode=view_mode
+                editor_ratio=editor_ratio
+                set_is_resizing_editor=set_is_resizing_editor
+                on_save=on_save
+        />
             </main>
 
             {move || file_to_delete.get().map(|path| {

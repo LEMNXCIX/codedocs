@@ -5,6 +5,9 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
     pub async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
+
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"])]
+    pub async fn listen(event: &str, handler: &js_sys::Function) -> JsValue;
 }
 
 pub fn make_args() -> js_sys::Object {

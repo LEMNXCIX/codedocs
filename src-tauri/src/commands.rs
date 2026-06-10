@@ -1,7 +1,11 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Mutex};
 
-use pulldown_cmark::{html, Parser};
 use tauri_plugin_dialog::DialogExt;
+
+use notify::{RecommendedWatcher, RecursiveMode, Watcher, Event, EventKind};
+use tauri::Emitter;
+
+static WATCHER: Mutex<Option<RecommendedWatcher>> = Mutex::new(None);
 
 #[tauri::command]
 pub fn open_project_folder(app: tauri::AppHandle) -> Result<String, String> {
@@ -103,14 +107,6 @@ pub fn save_file(path_str: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn render_markdown(content: String) -> String {
-    let parser = Parser::new(&content);
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-    html_output
-}
-
-#[tauri::command]
 pub fn generate_toc(content: String) -> String {
     crate::utils::md::generate_toc(&content)
 }
@@ -141,4 +137,46 @@ pub fn create_file(folder_path: String, name: String) -> Result<String, String> 
     fs::write(&path, "# Nuevo Archivo\n")
         .map_err(|e| format!("Error al crear el archivo: {}", e))?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn watch_folder(app: tauri::AppHandle, folder_path: String) -> Result<(), String> {
+    let mut watcher_lock = WATCHER.lock().map_err(|e| format!("Error al bloquear watcher: {}", e))?;
+
+    if watcher_lock.is_some() {
+        let _ = std::mem::take(&mut *watcher_lock);
+    }
+
+    let app_handle = app.clone();
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<Event, notify::Error>| {
+            if let Ok(event) = res {
+                if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)) {
+                    let paths: Vec<String> = event.paths
+                        .iter()
+                        .filter(|p| p.extension().is_some_and(|ext| ext == "md"))
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect();
+
+                    if !paths.is_empty() {
+                        let _ = app_handle.emit("fs-change", &paths);
+                    }
+                }
+            }
+        },
+        notify::Config::default(),
+    ).map_err(|e| format!("Error al crear watcher: {}", e))?;
+
+    watcher.watch(Path::new(&folder_path), RecursiveMode::Recursive)
+        .map_err(|e| format!("Error al observar carpeta: {}", e))?;
+
+    *watcher_lock = Some(watcher);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_watching() -> Result<(), String> {
+    let mut watcher_lock = WATCHER.lock().map_err(|e| format!("Error al bloquear watcher: {}", e))?;
+    *watcher_lock = None;
+    Ok(())
 }

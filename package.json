@@ -4,7 +4,8 @@
   "description": "This template should help get you started developing with Tauri and Leptos.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:cm": "esbuild js/codemirror-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/codemirror-bridge.js --minify"
   },
   "repository": {
     "type": "git",
@@ -20,7 +21,19 @@
   "homepage": "https://github.com/LEMNXCIX/codedocs#readme",
   "devDependencies": {
     "autoprefixer": "^10.4.23",
+    "esbuild": "^0.28.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19"
+  },
+  "dependencies": {
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "codemirror": "^6.0.2",
+    "katex": "^0.17.0",
+    "mermaid": "^11.15.0"
   }
 }

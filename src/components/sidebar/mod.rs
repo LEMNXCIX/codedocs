@@ -1,10 +1,13 @@
+mod outline;
+
 use crate::types::FileEntry;
 use crate::utils::env::is_tauri;
 use crate::utils::tauri_bridge::{self, invoke};
+use crate::components::ui::{AppStatus, Button, FileTree};
+use crate::utils::markdown::Heading;
 use leptos::logging::error;
 use leptos::prelude::*;
 use leptos::reactive::spawn_local;
-use crate::components::ui::{AppStatus, Button, FileTree};
 use wasm_bindgen::JsValue;
 
 #[component]
@@ -95,6 +98,12 @@ pub fn OpenFolderButton(
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum SidebarTab {
+    Files,
+    Outline,
+}
+
 #[component]
 pub fn Sidebar(
     path: ReadSignal<String>,
@@ -106,7 +115,10 @@ pub fn Sidebar(
     on_delete: Callback<String>,
     on_rename: Callback<String>,
     create_new_file: Callback<()>,
+    headings: ReadSignal<Vec<Heading>>,
 ) -> impl IntoView {
+    let (active_tab, set_active_tab) = signal(SidebarTab::Files);
+
     view! {
         <aside
             class="border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-brand-dark flex flex-col transition-none flex-shrink-0 overflow-hidden"
@@ -136,33 +148,69 @@ pub fn Sidebar(
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <h2 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">
-                        "Explorador"
-                    </h2>
-                    <OpenFolderButton set_files=set_files set_path=set_path />
-                    {if is_tauri() {
+                    <div class="flex gap-1 bg-slate-100 dark:bg-slate-800/50 rounded-md p-0.5">
+                        <button
+                            class=move || format!(
+                                "flex-1 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded transition-colors {}",
+                                if active_tab.get() == SidebarTab::Files { "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" } else { "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300" }
+                            )
+                            on:click=move |_| set_active_tab.set(SidebarTab::Files)
+                        >
+                            "Archivos"
+                        </button>
+                        <button
+                            class=move || format!(
+                                "flex-1 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded transition-colors {}",
+                                if active_tab.get() == SidebarTab::Outline { "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" } else { "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300" }
+                            )
+                            on:click=move |_| set_active_tab.set(SidebarTab::Outline)
+                        >
+                            "Contenido"
+                        </button>
+                    </div>
+
+                    {move || if active_tab.get() == SidebarTab::Files {
                         view! {
-                            <button
-                                class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-medium transition-all"
-                                on:click=move |_| create_new_file.run(())
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                                "Nuevo Archivo"
-                            </button>
-                        }.into_any()
-                    } else {
-                        ().into_any()
-                    }}
+                            <div class="flex flex-col gap-2 mt-2">
+                                <OpenFolderButton set_files=set_files set_path=set_path />
+                                {if is_tauri() {
+                                    view! {
+                                        <button
+                                            class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md text-xs font-medium transition-all"
+                                            on:click=move |_| create_new_file.run(())
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                                            "Nuevo Archivo"
+                                        </button>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+                </div>
+            }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
                 </div>
             </div>
 
             <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                <div class="mb-4">
-                    <p class="text-[11px] font-mono text-slate-400 dark:text-slate-600 truncate bg-slate-100 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800">
-                        {move || path.get()}
-                    </p>
-                </div>
-                <FileTree items=files on_click=on_file_click on_delete=on_delete on_rename=on_rename />
+                {move || if active_tab.get() == SidebarTab::Files {
+                    view! {
+                        <div>
+                            <div class="mb-4">
+                                <p class="text-[11px] font-mono text-slate-400 dark:text-slate-600 truncate bg-slate-100 dark:bg-slate-900/50 p-2 rounded border border-slate-200 dark:border-slate-800">
+                                    {move || path.get()}
+                                </p>
+                            </div>
+                            <FileTree items=files on_click=on_file_click on_delete=on_delete on_rename=on_rename />
+                        </div>
+                    }.into_any()
+                } else {
+                    view! {
+                        <outline::OutlinePanel headings=headings />
+                    }.into_any()
+                }}
             </div>
         </aside>
     }

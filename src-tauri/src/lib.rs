@@ -8,7 +8,7 @@ mod commands;
 mod utils;
 use crate::commands::{
     create_file, delete_file, generate_toc, list_markdown_files, open_project_folder, read_file,
-    rename_file, render_markdown, save_file,
+    rename_file, save_file, watch_folder, stop_watching,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,11 +22,12 @@ pub fn run() {
             list_markdown_files,
             save_file,
             read_file,
-            render_markdown,
             generate_toc,
             delete_file,
             rename_file,
             create_file,
+            watch_folder,
+            stop_watching,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
