@@ -1,3 +1,4 @@
+use crate::types::FileEntry;
 use crate::utils::env::is_tauri;
 use leptos::prelude::*;
 
@@ -35,14 +36,6 @@ pub fn Button(
             {children()}
         </button>
     }
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
-pub struct FileEntry {
-    pub name: String,
-    pub path: String,
-    pub is_dir: bool,
-    pub children: Vec<FileEntry>,
 }
 
 #[component]

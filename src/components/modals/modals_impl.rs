@@ -43,7 +43,6 @@ pub fn AlertModal(
 }
 
 #[component]
-
 pub fn DeleteConfirmModal(
     path: String,
     on_confirm: Callback<()>,

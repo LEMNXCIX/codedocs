@@ -1,13 +1,8 @@
 use crate::utils::env::is_tauri;
+use crate::utils::tauri_bridge::{self, invoke};
 use leptos::prelude::*;
 use leptos::reactive::spawn_local;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
-    async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
-}
+use wasm_bindgen::JsValue;
 
 #[component]
 pub fn TemplateToolbar(
@@ -70,7 +65,7 @@ pub fn TemplateToolbar(
             <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
 
             <div class="flex-1 flex items-center">
-                 <button
+                <button
                     class="inline-flex items-center px-4 py-1.5 rounded-full bg-brand-orange/10 text-brand-orange hover:bg-brand-orange hover:text-white font-semibold text-[11px] transition-all duration-300 shadow-sm shadow-brand-orange/5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group relative"
                     disabled=move || !is_tauri()
                     title=move || if is_tauri() { "Generar tabla de contenidos" } else { "Generación de índice deshabilitada en versión web" }
@@ -78,7 +73,7 @@ pub fn TemplateToolbar(
                         let current_content = content.get();
                         spawn_local(async move {
                             let args = js_sys::Object::new();
-                            js_sys::Reflect::set(&args, &"content".into(), &JsValue::from(current_content)).unwrap();
+                            tauri_bridge::set_arg(&args, "content", JsValue::from(current_content));
                             let result = invoke("generate_toc", args.into()).await;
                             if let Ok(toc_js) = result {
                                 if let Some(toc) = toc_js.as_string() {
