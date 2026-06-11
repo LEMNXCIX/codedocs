@@ -330,7 +330,7 @@ pub fn Layout() -> impl IntoView {
     let char_count = move || editor_content.get().len();
 
     view! {
-        <div class="flex flex-col h-screen bg-slate-50 dark:bg-brand-dark text-slate-900 dark:text-slate-200 font-sans transition-all duration-300 overflow-hidden">
+        <div class="flex flex-col h-screen bg-base-50 dark:bg-base-900 text-base-900 dark:text-base-200 font-sans transition-all duration-300 overflow-hidden">
 
             <div class="flex flex-row flex-1 min-h-0"
                 class:select-none=move || is_resizing_sidebar.get()
@@ -350,13 +350,12 @@ pub fn Layout() -> impl IntoView {
                     headings=headings
                 />
 
-                // Resizer Sidebar
                 <div
                     class="w-1 hover:w-1.5 bg-transparent hover:bg-brand-orange/40 cursor-col-resize transition-all z-50 flex-shrink-0"
                     on:mousedown=move |_| set_is_resizing_sidebar.set(true)
                 />
 
-                <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-brand-dark overflow-hidden">
+                <main class="flex-1 flex flex-col min-w-0 bg-base-50 dark:bg-base-900 overflow-hidden">
                     <EditorHeader selected_file=selected_file />
 
                     <EditorPane
@@ -369,17 +368,16 @@ pub fn Layout() -> impl IntoView {
                 </main>
             </div>
 
-            // Footer
-            <footer class="h-8 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 bg-white dark:bg-brand-dark/80 backdrop-blur-md z-20 flex-shrink-0">
+            <footer class="h-8 border-t border-base-200 dark:border-base-800 flex items-center justify-between px-4 bg-base-50 dark:bg-base-900/80 backdrop-blur-md z-20 flex-shrink-0">
                 <div class="flex items-center gap-3">
-                    <div class="flex gap-0.5 bg-slate-100 dark:bg-slate-800/50 rounded-md p-0.5">
+                    <div class="flex gap-0.5 bg-base-100 dark:bg-base-800/50 rounded-md p-0.5">
                         <button
                             class=move || format!(
                                 "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all {}",
                                 if view_mode.get() == ViewMode::Raw {
-                                    "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                                    "bg-base-50 dark:bg-base-700 text-base-900 dark:text-base-50 shadow-sm"
                                 } else {
-                                    "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                    "text-base-500 dark:text-base-400 hover:text-base-700 dark:hover:text-base-300"
                                 }
                             )
                             on:click=move |_| set_view_mode.set(ViewMode::Raw)
@@ -390,9 +388,9 @@ pub fn Layout() -> impl IntoView {
                             class=move || format!(
                                 "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all {}",
                                 if view_mode.get() == ViewMode::Formatted {
-                                    "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                                    "bg-base-50 dark:bg-base-700 text-base-900 dark:text-base-50 shadow-sm"
                                 } else {
-                                    "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                    "text-base-500 dark:text-base-400 hover:text-base-700 dark:hover:text-base-300"
                                 }
                             )
                             on:click=move |_| set_view_mode.set(ViewMode::Formatted)
@@ -401,19 +399,19 @@ pub fn Layout() -> impl IntoView {
                         </button>
                     </div>
 
-                    <div class="h-3 w-px bg-slate-200 dark:bg-slate-800"></div>
+                    <div class="h-3 w-px bg-base-200 dark:bg-base-800"></div>
 
-                    <span class="text-[10px] font-mono text-slate-400 dark:text-slate-600">
+                    <span class="text-[10px] font-mono text-base-400 dark:text-base-600">
                         {move || format!("{} palabras", word_count())}
                     </span>
-                    <span class="text-[10px] font-mono text-slate-400 dark:text-slate-600">
+                    <span class="text-[10px] font-mono text-base-400 dark:text-base-600">
                         {move || format!("{} caracteres", char_count())}
                     </span>
                 </div>
 
                 <div class="flex items-center gap-1">
                     <button
-                        class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all bg-base-900 hover:bg-base-700 text-base-50 disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled=move || !is_tauri()
                         title=move || if is_tauri() { "Guardar cambios" } else { "Guardado directo deshabilitado en versión web" }
                         on:click=move |_| on_save.run(())
@@ -423,7 +421,7 @@ pub fn Layout() -> impl IntoView {
                     </button>
 
                     <button
-                        class="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all"
+                        class="p-1 text-base-400 hover:text-brand-orange hover:bg-base-100 dark:hover:bg-base-800 rounded-md transition-all"
                         title="Limpiar editor"
                         on:click=move |_| clear_editor.run(())
                     >

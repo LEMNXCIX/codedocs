@@ -10,15 +10,15 @@ pub fn AppStatus() -> impl IntoView {
         "Web (Demo Mode)"
     };
     let dot_color = if is_tauri() {
-        "bg-green-500"
+        "bg-base-900"
     } else {
-        "bg-amber-500"
+        "bg-brand-orange"
     };
 
     view! {
-        <div class="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
+        <div class="flex items-center gap-2 px-3 py-1 bg-base-100 dark:bg-base-800 rounded-full border border-base-200 dark:border-base-700">
             <span class=format!("w-2 h-2 rounded-full {}", dot_color)></span>
-            <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">
+            <span class="text-[10px] font-bold text-base-500 dark:text-base-400 uppercase tracking-tighter">
                 {mode_label}
             </span>
         </div>
@@ -31,7 +31,7 @@ pub fn Button(
     children: Children,
 ) -> impl IntoView {
     view! {
-        <button class="px-4 py-2 mt-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-md text-sm font-medium transition-all shadow-sm active:scale-95"
+        <button class="px-4 py-2 mt-2 bg-base-900 hover:bg-base-700 dark:bg-base-50 dark:hover:bg-base-200 text-base-50 dark:text-base-900 rounded-md text-sm font-medium transition-all shadow-sm active:scale-95"
             on:click=move |ev| on_click.run(ev)>
             {children()}
         </button>
@@ -62,10 +62,10 @@ pub fn TreeItem(
     view! {
         <li class="select-none group">
             <div
-                class="flex items-center gap-2 py-1 px-2 rounded-md cursor-pointer transition-colors hover:bg-slate-200 dark:hover:bg-slate-800 text-sm"
+                class="flex items-center gap-2 py-1 px-2 rounded-md cursor-pointer transition-colors hover:bg-base-200 dark:hover:bg-base-800 text-sm"
                 on:click=on_item_click
             >
-                <span class="w-4 flex justify-center text-slate-400">
+                <span class="w-4 flex justify-center text-base-400">
                     {if item.is_dir {
                         if is_expanded.get() { "▾" } else { "▸" }
                     } else {
@@ -75,7 +75,7 @@ pub fn TreeItem(
                 <span class="text-lg">
                     {if item.is_dir { "📁" } else { "📄" }}
                 </span>
-                <span class="truncate text-slate-700 dark:text-slate-300 flex-1">
+                <span class="truncate text-base-700 dark:text-base-300 flex-1">
                     {item.name.clone()}
                 </span>
                 {if !item.is_dir && is_tauri() {
@@ -83,7 +83,7 @@ pub fn TreeItem(
                     let path_ren = item.path.clone();
                     view! {
                         <button
-                            class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
+                            class="opacity-0 group-hover:opacity-100 p-1 text-base-400 hover:text-brand-orange transition-all"
                             on:click=move |ev| {
                                 ev.stop_propagation();
                                 on_delete.run(path_del.clone());
@@ -92,7 +92,7 @@ pub fn TreeItem(
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                         </button>
                         <button
-                            class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-500 transition-all"
+                            class="opacity-0 group-hover:opacity-100 p-1 text-base-400 hover:text-brand-orange transition-all"
                             on:click=move |ev| {
                                 ev.stop_propagation();
                                 on_rename.run(path_ren.clone());
@@ -107,7 +107,7 @@ pub fn TreeItem(
             </div>
             {move || if is_expanded.get() && item.is_dir {
                 view! {
-                    <ul class="ml-4 border-l border-slate-200 dark:border-slate-800 mt-1 space-y-0.5">
+                    <ul class="ml-4 border-l border-base-200 dark:border-base-800 mt-1 space-y-0.5">
                         {children.clone().into_iter().map(|child| {
                             view! { <TreeItem item=child on_click=on_click on_rename=on_rename on_delete=on_delete /> }
                         }).collect_view()}

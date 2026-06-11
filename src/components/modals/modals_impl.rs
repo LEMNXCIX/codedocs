@@ -14,25 +14,25 @@ pub fn AlertModal(
     });
 
     view! {
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-            <div class="bg-white dark:bg-slate-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
-                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-base-900/50 backdrop-blur-sm p-4">
+            <div class="bg-base-50 dark:bg-base-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-base-200 dark:border-base-800 animate-in zoom-in-95 duration-200">
+                <h3 class="text-lg font-bold text-base-900 dark:text-base-50 mb-2">
                     {title}
                 </h3>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                <p class="text-sm text-base-500 dark:text-base-400 mb-6">
                     {message}
                 </p>
 
                 <div class="flex justify-end gap-3">
                     <button
                         on:click=move |_| on_cancel.run(())
-                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-600 dark:text-base-400 hover:bg-base-100 dark:hover:bg-base-800 rounded-md transition-colors"
                     >
                         "Cancelar"
                     </button>
                     <button
                         on:click=move |_| on_confirm.run(())
-                        class="px-4 py-2 text-sm font-medium text-white bg-slate-900 dark:bg-white dark:text-slate-900 hover:opacity-90 rounded-md shadow-sm transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-50 bg-base-900 dark:bg-base-50 dark:text-base-900 hover:bg-base-700 dark:hover:bg-base-200 rounded-md shadow-sm transition-colors"
                     >
                         "Confirmar"
                     </button>
@@ -55,12 +55,12 @@ pub fn DeleteConfirmModal(
     });
 
     view! {
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-            <div class="bg-white dark:bg-slate-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
-                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-base-900/50 backdrop-blur-sm p-4">
+            <div class="bg-base-50 dark:bg-base-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-base-200 dark:border-base-800 animate-in zoom-in-95 duration-200">
+                <h3 class="text-lg font-bold text-base-900 dark:text-base-50 mb-2">
                     "¿Eliminar archivo?"
                 </h3>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                <p class="text-sm text-base-500 dark:text-base-400 mb-6">
                     "Estás a punto de borrar " <span class="font-mono text-xs">{path.clone()}</span>
                     ". Esta acción no se puede deshacer."
                 </p>
@@ -68,13 +68,13 @@ pub fn DeleteConfirmModal(
                 <div class="flex justify-end gap-3">
                     <button
                         on:click=move |_| on_cancel.run(())
-                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-600 dark:text-base-400 hover:bg-base-100 dark:hover:bg-base-800 rounded-md transition-colors"
                     >
                         "Cancelar"
                     </button>
                     <button
                         on:click=move |_| on_confirm.run(())
-                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-50 bg-brand-orange hover:bg-brand-orange/80 rounded-md shadow-sm transition-colors"
                     >
                         "Eliminar permanentemente"
                     </button>
@@ -105,18 +105,18 @@ pub fn RenameConfirmModal(
     });
 
     view! {
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-            <div class="bg-white dark:bg-slate-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
-                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-base-900/50 backdrop-blur-sm p-4">
+            <div class="bg-base-50 dark:bg-base-900 w-full max-w-md p-6 rounded-lg shadow-2xl border border-base-200 dark:border-base-800 animate-in zoom-in-95 duration-200">
+                <h3 class="text-lg font-bold text-base-900 dark:text-base-50 mb-2">
                     "Renombrar archivo"
                 </h3>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 truncate">
+                <p class="text-xs text-base-500 dark:text-base-400 mb-4 truncate">
                     "Ruta: " {path.clone()}
                 </p>
 
                 <input
                     type="text"
-                    class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6 text-slate-900 dark:text-slate-100"
+                    class="w-full px-3 py-2 bg-base-100 dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange mb-6 text-base-900 dark:text-base-100"
                     prop:value=move || new_name.get()
                     on:input=move |ev| set_new_name.set(event_target_value(&ev))
                     on:keydown=move |ev| {
@@ -129,13 +129,13 @@ pub fn RenameConfirmModal(
                 <div class="flex justify-end gap-3">
                     <button
                         on:click=move |_| on_cancel.run(())
-                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-600 dark:text-base-400 hover:bg-base-100 dark:hover:bg-base-800 rounded-md transition-colors"
                     >
                         "Cancelar"
                     </button>
                     <button
                         on:click=move |_| on_confirm.run(new_name.get())
-                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+                        class="px-4 py-2 text-sm font-medium text-base-50 bg-base-900 hover:bg-base-700 rounded-md shadow-sm transition-colors"
                     >
                         "Guardar cambios"
                     </button>

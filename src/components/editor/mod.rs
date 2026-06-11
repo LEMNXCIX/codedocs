@@ -37,10 +37,10 @@ pub fn EditorPane(
                     </div>
                 }.into_any(),
                 ViewMode::Formatted => view! {
-                    <div class="w-full h-full flex flex-col bg-slate-50/50 dark:bg-slate-900/10 overflow-hidden">
+                    <div class="w-full h-full flex flex-col bg-base-100/50 dark:bg-base-900/10 overflow-hidden">
                         <div class="flex-1 overflow-y-auto p-8 custom-scrollbar overflow-x-auto">
                             <div
-                                class="prose dark:prose-invert prose-slate max-w-none break-words prose-headings:font-bold prose-h1:text-3xl prose-h1:mb-6 prose-p:text-slate-600 dark:prose-p:text-slate-400 prose-p:leading-7 prose-pre:overflow-x-auto prose-code:text-brand-orange prose-code:bg-brand-orange/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-blockquote:border-brand-orange/50 prose-blockquote:bg-brand-orange/5 prose-img:rounded-lg prose-img:shadow-md"
+                                class="prose dark:prose-invert prose-slate max-w-none break-words prose-headings:font-bold prose-h1:text-3xl prose-h1:mb-6 prose-p:text-base-600 dark:prose-p:text-base-400 prose-p:leading-7 prose-pre:overflow-x-auto prose-code:text-brand-orange prose-code:bg-brand-orange/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-blockquote:border-brand-orange/50 prose-blockquote:bg-brand-orange/5 prose-img:rounded-lg prose-img:shadow-md"
                                 inner_html=preview_html
                             ></div>
                         </div>

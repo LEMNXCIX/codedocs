@@ -2,13 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'UnifrakturMaguntia';
+  src: url('/public/fonts/UnifrakturMaguntia-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
-    --brand-dark: #121212;
+    --brand-dark: #2F2F2F;
     --brand-orange: #ffb74d;
+    --base-50: #FCFFFF;
+    --base-100: #F4F5F5;
+    --base-200: #E6E7E7;
+    --base-300: #D0D1D1;
+    --base-400: #A3A4A4;
+    --base-500: #767777;
+    --base-600: #5F6060;
+    --base-700: #4A4B4B;
+    --base-800: #3D3E3E;
+    --base-900: #2F2F2F;
   }
 
-  /* Custom Scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -19,20 +36,20 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
+    background: #D0D1D1;
     border-radius: 10px;
   }
 
   .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #1e293b;
+    background: #4A4B4B;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #cbd5e1;
+    background: #A3A4A4;
   }
 
   .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    background: #5F6060;
   }
 }
 
@@ -42,36 +59,33 @@
   }
 }
 
-/* Premium Code Blocks Styles */
 .prose pre {
   position: relative !important;
   padding: 1.5rem !important;
-  background-color: #0f172a !important;
+  background-color: #3D3E3E !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 0.75rem !important;
   box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
   margin-top: 1.5rem !important;
   margin-bottom: 1.5rem !important;
   overflow-x: auto !important;
-  /* Fix for code block overflow */
 }
 
 .prose pre code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
   font-size: 0.875rem !important;
   line-height: 1.7 !important;
-  color: #f1f5f9 !important;
+  color: #F4F5F5 !important;
   background-color: transparent !important;
   padding: 0 !important;
   display: block;
 }
 
 .dark .prose pre {
-  background-color: #020617 !important;
+  background-color: #2F2F2F !important;
   border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
-/* Table Styling */
 .prose table {
   width: 100%;
   border-collapse: collapse;
@@ -83,45 +97,43 @@
 }
 
 .prose th {
-  background-color: #f8fafc;
-  color: #334155;
+  background-color: #F4F5F5;
+  color: #3D3E3E;
   font-weight: 600;
   text-align: left;
   padding: 12px 15px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid #E6E7E7;
 }
 
 .dark .prose th {
-  background-color: #1e293b;
-  color: #f1f5f9;
-  border-bottom-color: #334155;
+  background-color: #3D3E3E;
+  color: #F4F5F5;
+  border-bottom-color: #4A4B4B;
 }
 
 .prose td {
   padding: 12px 15px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #F4F5F5;
 }
 
 .dark .prose td {
-  border-bottom-color: #1e293b;
+  border-bottom-color: #3D3E3E;
 }
 
 .prose tr:nth-child(even) {
-  background-color: #fcfcfc;
+  background-color: #FCFFFF;
 }
 
 .dark .prose tr:nth-child(even) {
-  background-color: #0f172a / 30;
+  background-color: rgba(47, 47, 47, 0.3);
 }
 
-/* Checklist / Task List Styling */
 .prose ul li:has(input[type="checkbox"]) {
   display: flex !important;
   align-items: flex-start !important;
   list-style-type: none !important;
   padding-left: 0 !important;
   white-space: normal !important;
-  /* Allow flex to manage space */
 }
 
 .prose ul li input[type="checkbox"] {
@@ -129,7 +141,7 @@
   flex-shrink: 0;
   width: 1.25rem;
   height: 1.25rem;
-  border: 2px solid #cbd5e1;
+  border: 2px solid #D0D1D1;
   border-radius: 4px;
   margin-right: 0.75rem;
   margin-top: 0.25rem;
@@ -139,8 +151,8 @@
 }
 
 .dark .prose ul li input[type="checkbox"] {
-  border-color: #475569;
-  background-color: #1e293b;
+  border-color: #5F6060;
+  background-color: #3D3E3E;
 }
 
 .prose ul li input[type="checkbox"]:checked {
@@ -158,7 +170,6 @@
   transform: translate(-50%, -50%);
 }
 
-/* Callouts / Better Blockquotes */
 .prose blockquote {
   border-left-width: 4px;
   border-left-color: var(--brand-orange);
@@ -166,12 +177,12 @@
   padding: 1rem 1.5rem;
   border-radius: 0 0.5rem 0.5rem 0;
   font-style: normal;
-  color: #475569;
+  color: #5F6060;
 }
 
 .dark .prose blockquote {
   background-color: rgba(255, 183, 77, 0.02);
-  color: #94a3b8;
+  color: #A3A4A4;
 }
 
 .prose blockquote p:first-of-type::before,
@@ -188,7 +199,6 @@
   letter-spacing: 0.05em;
 }
 
-/* Fix for line breaks (Soft Wraps like GitHub) */
 .prose p {
   white-space: pre-line;
 }
@@ -197,20 +207,17 @@
   white-space: pre-line;
 }
 
-/* Ensure task list content still wraps correctly */
 .prose li:has(input[type="checkbox"])>* {
   white-space: pre-line;
 }
 
-/* Force Heading Styles */
 .prose h1,
 .prose h2,
 .prose h3,
 .prose h4 {
   display: block !important;
   font-weight: 800 !important;
-  color: #0f172a !important;
-  /* Slate 900 */
+  color: #2F2F2F !important;
   margin-top: 1.5em !important;
   margin-bottom: 0.5em !important;
   line-height: 1.2 !important;
@@ -220,19 +227,18 @@
 .dark .prose h2,
 .dark .prose h3,
 .dark .prose h4 {
-  color: #f8fafc !important;
-  /* Slate 50 */
+  color: #FCFFFF !important;
 }
 
 .prose h1 {
   font-size: 2.25rem !important;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #E6E7E7;
   padding-bottom: 0.3em;
 }
 
 .prose h2 {
   font-size: 1.875rem !important;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #F4F5F5;
   padding-bottom: 0.2em;
 }
 
@@ -245,44 +251,43 @@
 }
 
 .dark .prose h1 {
-  border-bottom-color: #1e293b;
+  border-bottom-color: #3D3E3E;
 }
 
 .dark .prose h2 {
-    border-bottom-color: rgba(15, 23, 42, 0.5);
+  border-bottom-color: rgba(47, 47, 47, 0.5);
 }
 
-/* CodeMirror 6 Container Styles */
 .codemirror-container .cm-editor {
-    height: 100%;
-    font-size: 14px;
+  height: 100%;
+  font-size: 14px;
 }
 
 .codemirror-container .cm-editor .cm-scroller {
-    overflow: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .codemirror-container .cm-editor .cm-content {
-    padding: 2rem;
+  padding: 2rem;
 }
 
 .codemirror-container .cm-editor .cm-gutters {
-    border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #E6E7E7;
 }
 
 .dark .codemirror-container .cm-editor .cm-gutters {
-    border-right-color: #1e293b;
+  border-right-color: #3D3E3E;
 }
 
 .codemirror-container .cm-editor .cm-focused {
-    outline: none !important;
+  outline: none !important;
 }
 
 .codemirror-container .cm-editor .cm-activeLineGutter {
-    background-color: rgba(255, 183, 77, 0.05);
+  background-color: rgba(255, 183, 77, 0.05);
 }
 
 .codemirror-container .cm-editor .cm-activeLine {
-    background-color: rgba(255, 183, 77, 0.03);
+  background-color: rgba(255, 183, 77, 0.03);
 }
