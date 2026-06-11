@@ -168,13 +168,13 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 
 #### 0.1 — Limpieza y reorganización
 
-- [ ] Refactorizar `layout.rs` (547 líneas) → extraer componentes
+- [x] Refactorizar `layout.rs` (547 líneas) → extraer componentes
   - Sidebar → `components/sidebar/`
   - Header bar → `components/layout.rs` (solo shell)
   - Editor pane → `components/editor/`
-- [ ] Centralizar `invoke()` calls en `utils/tauri_bridge.rs` (se repite en 4 archivos)
-- [ ] Eliminar `render_markdown` command duplicado (backend usa el mismo parser que el frontend)
-- [ ] Extraer `FileEntry` a un tipo compartido o al menos un archivo dedicado
+- [x] Centralizar `invoke()` calls en `utils/tauri_bridge.rs` (se repite en 4 archivos)
+- [x] Eliminar `render_markdown` command duplicado (backend usa el mismo parser que el frontend)
+- [x] Extraer `FileEntry` a un tipo compartido o al menos un archivo dedicado
 
 #### 0.2 — Dependencias nuevas
 
@@ -184,13 +184,13 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 - [ ] `tauri-plugin-notification` — feedback al usuario
 - [ ] `tauri-plugin-process` — manejo de app lifecycle
 - [ ] `tauri-plugin-clipboard-manager` — clipboard avanzado
-- [ ] CodeMirror 6 via npm/wasm: `@codemirror/lang-markdown`, `@codemirror/theme-one-dark`
+- [x] CodeMirror 6 via npm/wasm: `@codemirror/lang-markdown`, `@codemirror/theme-one-dark`
 
 #### 0.3 — Build system
 
 - [ ] Verificar que `cargo tauri dev` funciona sin errores
 - [ ] Agregar script `dev.ps1` / `dev.sh` para un comando de inicio
-- [ ] Configurar `tailwind.config.js` con theme tokens (colores, fuentes, spacing)
+- [x] Configurar `tailwind.config.js` con theme tokens (colores, fuentes, spacing)
 - [ ] Crear `themes/` directory con al menos 2 temas base
 
 #### 0.4 — CI básico
@@ -209,65 +209,65 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 
 #### 1.1 — Integrar CodeMirror 6 como editor
 
-- [ ] Crear componente `CodeMirrorEditor` en Leptos
+- [x] Crear componente `CodeMirrorEditor` en Leptos
   - Montar CM6 en `<div>` via `NodeRef<HtmlElement>`
   - Configurar `@codemirror/lang-markdown`
   - Sincronizar contenido CM6 ↔ Leptos signal
   - Tema: `one-dark` para dark mode, `default` para light
-- [ ] Reemplazar `<textarea>` actual con CM6
-- [ ] Mantener preview panel como opción (Source mode)
+- [x] Reemplazar `<textarea>` actual con CM6
+- [x] Mantener preview panel como opción (Source mode)
 
 #### 1.2 — Preview mejorado
 
 - [ ] Agregar extensiones de `pulldown-cmark`:
   - `ENABLE_MATH` si está disponible, o pre-procesar `$...$` y `$$...$$` para KaTeX
   - `ENABLE_YAML_FRONTMATTER` (metadata block)
-- [ ] Integrar KaTeX rendering en preview (cargar katex.min.js + katex.css)
-- [ ] Integrar Mermaid rendering en preview (cargar mermaid.min.js)
+- [x] Integrar KaTeX rendering en preview (cargar katex.min.js + katex.css)
+- [x] Integrar Mermaid rendering en preview (cargar mermaid.min.js)
 - [ ] Sincronizar scroll editor ↔ preview (bidireccional)
 
 #### 1.3 — Outline panel
 
-- [ ] Extraer headings del documento (h1-h6) en tiempo real
-- [ ] Componente `OutlinePanel` en sidebar
+- [x] Extraer headings del documento (h1-h6) en tiempo real
+- [x] Componente `OutlinePanel` en sidebar
 - [ ] Click en heading → scroll a posición en editor/preview
 - [ ] Highlight heading actual según posición del cursor
-- [ ] Tabs en sidebar: "Files" | "Outline"
+- [x] Tabs en sidebar: "Files" | "Outline"
 
 #### 1.4 — Atajos de teclado esenciales
 
-- [ ] `Ctrl+S` — Guardar archivo
-- [ ] `Ctrl+B` — **Bold**
-- [ ] `Ctrl+I` — *Italic*
-- [ ] `Ctrl+K` — [Link]
+- [x] `Ctrl+S` — Guardar archivo
+- [x] `Ctrl+B` — **Bold**
+- [x] `Ctrl+I` — *Italic*
+- [x] `Ctrl+K` — [Link]
 - [ ] `Ctrl+Shift+K` — `Code inline`
 - [ ] `Ctrl+/` — Toggle heading
 - [ ] `Ctrl+Shift+M` — Math block
 - [ ] `Ctrl+N` — Nuevo archivo
 - [ ] `Ctrl+O` — Abrir carpeta
 - [ ] `Ctrl+W` — Cerrar archivo
-- [ ] `Ctrl+Z` / `Ctrl+Y` — Undo/Redo (ya en CM6)
+- [x] `Ctrl+Z` / `Ctrl+Y` — Undo/Redo (ya en CM6)
 - [ ] Hook global `keyboard.rs` que intercepte y delegue a CM6 o Tauri
 
 #### 1.5 — Modos de vista
 
-- [ ] **Source Mode**: Editor CM6 a la izquierda, preview a la derecha (split pane actual)
-- [ ] **Live Preview Mode**: Editor CM6 solo, con preview inline para elementos bloque (como VS Code)
-- [ ] **Reader Mode**: Solo preview, sin editor
-- [ ] Toggle entre modos con botón o atajo
+- [x] **Source Mode**: Editor CM6 a la izquierda, preview a la derecha (split pane actual)
+- [x] **Live Preview Mode**: Editor CM6 solo, con preview inline para elementos bloque (como VS Code)
+- [x] **Reader Mode**: Solo preview, sin editor
+- [x] Toggle entre modos con botón o atajo
 
 #### 1.6 — Auto-save
 
-- [ ] Debounced auto-save (1.5s sin tipeo → guardar)
+- [x] Debounced auto-save (1.5s sin tipeo → guardar)
 - [ ] Indicador visual: "Saved" / "Saving..." / "Unsaved"
-- [ ] Solo en modo Tauri (no web demo)
+- [x] Solo en modo Tauri (no web demo)
 
 #### 1.7 — File watching
 
-- [ ] Tauri command: `watch_folder(folder_path)` usando `notify` crate
-- [ ] Evento → frontend: "file_changed" / "file_deleted" / "file_created"
+- [x] Tauri command: `watch_folder(folder_path)` usando `notify` crate
+- [x] Evento → frontend: "file_changed" / "file_deleted" / "file_created"
 - [ ] Si el archivo abierto cambió externamente: prompt "Reload?" o auto-reload
-- [ ] Refrescar file tree cuando detecte cambios
+- [x] Refrescar file tree cuando detecte cambios
 
 **Entregable:** CodeDocs abre carpetas, edita Markdown con syntax highlighting, preview con KaTeX+Mermaid, outline navegable, atajos principales, auto-save, file watching.
 
