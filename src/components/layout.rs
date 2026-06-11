@@ -13,9 +13,8 @@ use leptos::reactive::spawn_local;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ViewMode {
-    Source,
-    Live,
-    Reader,
+    Raw,
+    Formatted,
 }
 
 #[component]
@@ -25,16 +24,13 @@ pub fn Layout() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
     let (editor_content, set_editor_content) = signal(String::new());
     let (preview_html, set_preview_html) = signal(String::new());
-    let (view_mode, set_view_mode) = signal(ViewMode::Live);
+    let (view_mode, set_view_mode) = signal(ViewMode::Formatted);
     let is_saving = RwSignal::new(false);
     let is_loading_file = RwSignal::new(false);
     let (headings, set_headings) = signal(Vec::<Heading>::new());
 
     let (sidebar_width, set_sidebar_width) = signal(280.0);
-    let (editor_ratio, set_editor_ratio) = signal(0.5);
     let (is_resizing_sidebar, set_is_resizing_sidebar) = signal(false);
-    let (is_resizing_editor, set_is_resizing_editor) = signal(false);
-    let editor_ref = NodeRef::<leptos::html::Textarea>::new();
 
     let (file_to_delete, set_file_to_delete) = signal::<Option<String>>(None);
     let (file_to_rename, set_file_to_rename) = signal::<Option<String>>(None);
@@ -47,26 +43,10 @@ pub fn Layout() -> impl IntoView {
                 set_sidebar_width.set(new_width);
             }
         }
-        if is_resizing_editor.get() {
-            let start_x = sidebar_width.get();
-            let total_width = web_sys::window()
-                .unwrap()
-                .inner_width()
-                .unwrap()
-                .as_f64()
-                .unwrap();
-            let main_width = total_width - start_x - 10.0;
-            let current_x = ev.client_x() as f64 - start_x;
-            let ratio = current_x / main_width;
-            if ratio > 0.1 && ratio < 0.9 {
-                set_editor_ratio.set(ratio);
-            }
-        }
     });
 
     let _ = window_event_listener(leptos::ev::mouseup, move |_| {
         set_is_resizing_sidebar.set(false);
-        set_is_resizing_editor.set(false);
     });
 
     let _ = window_event_listener(leptos::ev::keydown, move |ev: leptos::ev::KeyboardEvent| {
@@ -74,13 +54,10 @@ pub fn Layout() -> impl IntoView {
         let ctrl = ev.ctrl_key() || ev.meta_key();
         if ctrl && key == "1" {
             ev.prevent_default();
-            set_view_mode.set(ViewMode::Source);
+            set_view_mode.set(ViewMode::Raw);
         } else if ctrl && key == "2" {
             ev.prevent_default();
-            set_view_mode.set(ViewMode::Live);
-        } else if ctrl && key == "3" {
-            ev.prevent_default();
-            set_view_mode.set(ViewMode::Reader);
+            set_view_mode.set(ViewMode::Formatted);
         }
     });
 
@@ -196,8 +173,8 @@ pub fn Layout() -> impl IntoView {
         if let Some(old_path) = file_to_rename.get() {
             spawn_local(async move {
                 let args = js_sys::Object::new();
-tauri_bridge::set_arg(&args, "oldPath", JsValue::from(old_path.clone()));
-                    tauri_bridge::set_arg(&args, "newName", JsValue::from(new_name));
+                tauri_bridge::set_arg(&args, "oldPath", JsValue::from(old_path.clone()));
+                tauri_bridge::set_arg(&args, "newName", JsValue::from(new_name));
                 let result = invoke("rename_file", args.into()).await;
                 match result {
                     Ok(_) => {
@@ -212,26 +189,26 @@ tauri_bridge::set_arg(&args, "oldPath", JsValue::from(old_path.clone()));
         }
     };
 
-let create_new_file = Callback::new(move |_| {
-    let current_path = path.get();
-    if current_path != "No se ha seleccionado ninguna carpeta" {
-        spawn_local(async move {
-            let args = js_sys::Object::new();
-            tauri_bridge::set_arg(&args, "folderPath", JsValue::from(current_path.clone()));
-            tauri_bridge::set_arg(&args, "name", JsValue::from("Nuevo_Documento.md"));
-            let result = invoke("create_file", args.into()).await;
-            match result {
-                Ok(new_path_js) => {
-                    refresh_files();
-                    if let Some(new_path) = new_path_js.as_string() {
-                        leptos::logging::log!("Created: {}", new_path);
+    let create_new_file = Callback::new(move |_| {
+        let current_path = path.get();
+        if current_path != "No se ha seleccionado ninguna carpeta" {
+            spawn_local(async move {
+                let args = js_sys::Object::new();
+                tauri_bridge::set_arg(&args, "folderPath", JsValue::from(current_path.clone()));
+                tauri_bridge::set_arg(&args, "name", JsValue::from("Nuevo_Documento.md"));
+                let result = invoke("create_file", args.into()).await;
+                match result {
+                    Ok(new_path_js) => {
+                        refresh_files();
+                        if let Some(new_path) = new_path_js.as_string() {
+                            leptos::logging::log!("Created: {}", new_path);
+                        }
                     }
+                    Err(err) => error!("Error creating file: {:?}", err),
                 }
-                Err(err) => error!("Error creating file: {:?}", err),
-            }
-        });
-    }
-});
+            });
+        }
+    });
 
     let on_save = Callback::new(move |_| {
         if let Some(file_path) = selected_file.get() {
@@ -341,52 +318,119 @@ let create_new_file = Callback::new(move |_| {
         set_show_clear_confirm.set(false);
     };
 
+    let word_count = move || {
+        let content = editor_content.get();
+        if content.trim().is_empty() {
+            0
+        } else {
+            content.split_whitespace().count()
+        }
+    };
+
+    let char_count = move || editor_content.get().len();
+
     view! {
-        <div class="flex flex-row h-screen bg-slate-50 dark:bg-brand-dark text-slate-900 dark:text-slate-200 font-sans transition-all duration-300 overflow-hidden"
-            class:select-none=move || is_resizing_sidebar.get() || is_resizing_editor.get()
-            class:cursor-col-resize=move || is_resizing_sidebar.get() || is_resizing_editor.get()>
+        <div class="flex flex-col h-screen bg-slate-50 dark:bg-brand-dark text-slate-900 dark:text-slate-200 font-sans transition-all duration-300 overflow-hidden">
 
-<Sidebar
-        path=path
-        files=files
-        set_files=set_files
-        set_path=set_path
-        sidebar_width=sidebar_width
-        on_file_click=on_file_click
-        on_delete=on_delete_request
-                on_rename=on_rename_request
-                create_new_file=create_new_file
-                headings=headings
-        />
+            <div class="flex flex-row flex-1 min-h-0"
+                class:select-none=move || is_resizing_sidebar.get()
+                class:cursor-col-resize=move || is_resizing_sidebar.get()
+            >
 
-            // Resizer Sidebar
-            <div
-                class="w-1 hover:w-1.5 bg-transparent hover:bg-brand-orange/40 cursor-col-resize transition-all z-50 flex-shrink-0"
-                on:mousedown=move |_| set_is_resizing_sidebar.set(true)
-            />
+                <Sidebar
+                    path=path
+                    files=files
+                    set_files=set_files
+                    set_path=set_path
+                    sidebar_width=sidebar_width
+                    on_file_click=on_file_click
+                    on_delete=on_delete_request
+                    on_rename=on_rename_request
+                    create_new_file=create_new_file
+                    headings=headings
+                />
 
-            <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-brand-dark overflow-hidden">
-            <EditorHeader
-                editor_content=editor_content
-                set_editor_content=set_editor_content
-                editor_ref=editor_ref
-                view_mode=view_mode
-                set_view_mode=set_view_mode
-                selected_file=selected_file
-                on_clear=clear_editor
-                on_save=on_save
-            />
+                // Resizer Sidebar
+                <div
+                    class="w-1 hover:w-1.5 bg-transparent hover:bg-brand-orange/40 cursor-col-resize transition-all z-50 flex-shrink-0"
+                    on:mousedown=move |_| set_is_resizing_sidebar.set(true)
+                />
 
-            <EditorPane
-                editor_content=editor_content
-            set_editor_content=set_editor_content
-                preview_html=preview_html
-                view_mode=view_mode
-                editor_ratio=editor_ratio
-                set_is_resizing_editor=set_is_resizing_editor
-                on_save=on_save
-        />
-            </main>
+                <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-brand-dark overflow-hidden">
+                    <EditorHeader selected_file=selected_file />
+
+                    <EditorPane
+                        editor_content=editor_content
+                        set_editor_content=set_editor_content
+                        preview_html=preview_html
+                        view_mode=view_mode
+                        on_save=on_save
+                    />
+                </main>
+            </div>
+
+            // Footer
+            <footer class="h-8 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 bg-white dark:bg-brand-dark/80 backdrop-blur-md z-20 flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="flex gap-0.5 bg-slate-100 dark:bg-slate-800/50 rounded-md p-0.5">
+                        <button
+                            class=move || format!(
+                                "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all {}",
+                                if view_mode.get() == ViewMode::Raw {
+                                    "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                                } else {
+                                    "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                }
+                            )
+                            on:click=move |_| set_view_mode.set(ViewMode::Raw)
+                        >
+                            "Raw"
+                        </button>
+                        <button
+                            class=move || format!(
+                                "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all {}",
+                                if view_mode.get() == ViewMode::Formatted {
+                                    "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                                } else {
+                                    "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                }
+                            )
+                            on:click=move |_| set_view_mode.set(ViewMode::Formatted)
+                        >
+                            "Format"
+                        </button>
+                    </div>
+
+                    <div class="h-3 w-px bg-slate-200 dark:bg-slate-800"></div>
+
+                    <span class="text-[10px] font-mono text-slate-400 dark:text-slate-600">
+                        {move || format!("{} palabras", word_count())}
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400 dark:text-slate-600">
+                        {move || format!("{} caracteres", char_count())}
+                    </span>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button
+                        class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled=move || !is_tauri()
+                        title=move || if is_tauri() { "Guardar cambios" } else { "Guardado directo deshabilitado en versión web" }
+                        on:click=move |_| on_save.run(())
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        "Guardar"
+                    </button>
+
+                    <button
+                        class="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all"
+                        title="Limpiar editor"
+                        on:click=move |_| clear_editor.run(())
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </button>
+                </div>
+            </footer>
 
             {move || file_to_delete.get().map(|path| {
                 view! {
