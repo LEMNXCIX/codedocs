@@ -477,9 +477,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // === Task 5: ayudas de escritura (listas, citas, Tab) ===
   //
-  // Cada caso compara el contenido EXACTO del documento: sin la extensión de
-  // `markdown-input.mjs` el Enter/Tab por defecto deja otro texto y el caso
-  // falla. El foco vuelve con click antes de cada caso porque `setContent`
+  // Cada caso compara el contenido EXACTO del documento. Los nueve casos de
+  // Enter/Tab son discriminantes: sin la extensión de `markdown-input.mjs`
+  // el Enter/Tab por defecto deja otro texto y el caso falla. Los dos de
+  // tipeo (`- `, `- [ ] `) NO discriminan —`typingRule` es un no-op
+  // intencional que preserva el texto byte a byte— y son guardas de
+  // no-corrupción: si algún handler futuro reescribe lo tipeado, fallan.
+  // El foco vuelve con click antes de cada caso porque `setContent`
   // reescribe el documento por fuera del teclado.
   const focusEditor = async () => {
     await page.click(".cm-editor .cm-content");
