@@ -43,6 +43,14 @@ pub fn Layout() -> impl IntoView {
     // in every mode.
     Effect::new(move |_| {
         let content = state.content.get();
+        // The full-document HTML render is skipped while no preview pane is
+        // mounted (Raw mode): on a 5 000-line document it costs more than the
+        // live editor entire per-keystroke pipeline, and nobody reads the
+        // result until a preview mounts. Tracking view_mode recomputes on the
+        // mode switch itself, so the preview is never stale when it appears.
+        // headings still updates every change: the sidebar outline reads it in
+        // every mode. Task 6 deletes preview_html entirely and takes this
+        // guard with it.
         if state.view_mode.get() != ViewMode::Raw {
             preview_html.set(render_markdown(&content));
         }
