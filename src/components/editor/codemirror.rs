@@ -44,6 +44,25 @@ extern "C" {
     /// by the most recent render has finished.
     #[wasm_bindgen(js_name = __codedocs_render_enhancements_async, catch)]
     async fn cm_render_enhancements_async() -> Result<JsValue, JsValue>;
+
+    /// Registers the span provider the editor calls with the full document
+    /// text on every change. The callback never modifies the document; it
+    /// only returns decoration data: an `Array` of two elements, a
+    /// `Uint32Array` with `ranges` and a `Uint8Array` with the `SpanTag`
+    /// discriminants of `tags`.
+    ///
+    /// The JS name must match the global exported by
+    /// `js/codemirror-bridge.mjs` exactly; `check-bridge-contract.mjs`
+    /// verifies this contract.
+    #[wasm_bindgen(js_name = __codedocs_setSpanProvider)]
+    fn cm_set_span_provider(callback: &js_sys::Function);
+
+    /// Shows or hides the raw markdown source in live-format mode.
+    ///
+    /// Same contract as above; implemented on the JS side by a later task.
+    #[wasm_bindgen(js_name = __codedocs_setSourceVisible)]
+    #[allow(dead_code)]
+    fn cm_set_source_visible(is_visible: bool);
 }
 
 /// CodeMirror 6 host component.
@@ -82,6 +101,24 @@ pub fn CodeMirrorEditor(state: EditorState, on_save: Callback<()>) -> impl IntoV
         });
         cm_set_on_change(change_closure.as_ref().unchecked_ref());
         change_closure.forget();
+
+        // Span provider for live-format mode: the editor calls back with the
+        // full document text and gets decoration data. Markdown is the
+        // document — this never modifies it, it only labels spans. Leaked
+        // deliberately (`forget`), like the other closures: the editor's
+        // `on_cleanup` destroy is what stops it being invoked.
+        let span_closure = Closure::<dyn FnMut(String) -> JsValue>::new(move |text: String| {
+            let live = codedocs_core::live_spans(&text);
+            let ranges = js_sys::Uint32Array::from(live.ranges.as_slice());
+            let tag_bytes: Vec<u8> = live.tags.iter().map(|t| *t as u8).collect();
+            let tags = js_sys::Uint8Array::from(tag_bytes.as_slice());
+            let out = js_sys::Array::new();
+            out.push(&ranges);
+            out.push(&tags);
+            out.into()
+        });
+        cm_set_span_provider(span_closure.as_ref().unchecked_ref());
+        span_closure.forget();
 
         let save_closure = Closure::<dyn Fn()>::new(move || {
             on_save.run(());
