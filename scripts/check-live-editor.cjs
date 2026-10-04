@@ -475,6 +475,106 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check("sin KaTeX no hay excepción", fatal2.length === 0, JSON.stringify(fatal2.map((s) => s.slice(0, 120))));
   await page2.close();
 
+  // === Task 5: ayudas de escritura (listas, citas, Tab) ===
+  //
+  // Cada caso compara el contenido EXACTO del documento: sin la extensión de
+  // `markdown-input.mjs` el Enter/Tab por defecto deja otro texto y el caso
+  // falla. El foco vuelve con click antes de cada caso porque `setContent`
+  // reescribe el documento por fuera del teclado.
+  const focusEditor = async () => {
+    await page.click(".cm-editor .cm-content");
+    await page.waitForTimeout(200);
+  };
+
+  // Case: `- a` + Enter continúa la lista.
+  await setContent("- a");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter continúa la lista con `-`", (await getContent()) === "- a\n- ", JSON.stringify(await getContent()));
+
+  // Case: `1. a` + Enter continúa numerando.
+  await setContent("1. a");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter continúa la lista numerada", (await getContent()) === "1. a\n2. ", JSON.stringify(await getContent()));
+
+  // Case: `- [x] a` + Enter continúa la tarea desmarcada.
+  await setContent("- [x] a");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter continúa la tarea desmarcada", (await getContent()) === "- [x] a\n- [ ] ", JSON.stringify(await getContent()));
+
+  // Case: `- ` + Enter en el ítem vacío sale de la lista.
+  await setContent("- ");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter en ítem vacío sale de la lista", (await getContent()) === "", JSON.stringify(await getContent()));
+
+  // Case: Tab en `- a` indenta la línea dos espacios.
+  await setContent("- a");
+  await focusEditor();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(400);
+  check("Tab indenta el ítem", (await getContent()) === "  - a", JSON.stringify(await getContent()));
+
+  // Case: Shift-Tab en `  - a` lo desindenta.
+  await setContent("  - a");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Shift+Tab");
+  await page.waitForTimeout(400);
+  check("Shift-Tab desindenta el ítem", (await getContent()) === "- a", JSON.stringify(await getContent()));
+
+  // Case: Tab fuera de lista inserta dos espacios en el cursor.
+  await setContent("texto");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(400);
+  check("Tab fuera de lista inserta dos espacios", (await getContent()) === "texto  ", JSON.stringify(await getContent()));
+
+  // Case: regla de tipeo `- ` al inicio de una línea vacía.
+  await setContent("");
+  await focusEditor();
+  await page.keyboard.type("- ", { delay: 30 });
+  await page.waitForTimeout(400);
+  check("tipear `- ` arma el marcador", (await getContent()) === "- ", JSON.stringify(await getContent()));
+
+  // Case: regla de tipeo `- [ ] ` al inicio de una línea vacía.
+  await setContent("");
+  await focusEditor();
+  await page.keyboard.type("- [ ] ", { delay: 30 });
+  await page.waitForTimeout(400);
+  check("tipear `- [ ] ` arma la tarea", (await getContent()) === "- [ ] ", JSON.stringify(await getContent()));
+
+  // Case: Enter dentro de un bloque cercado inserta un salto literal aunque
+  // la línea parezca lista (sin la guarda de `CodeBlock` continuaría `- `).
+  await setContent("```\n- a\n```");
+  await focusEditor();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter en bloque de código no continúa la lista", (await getContent()) === "```\n- a\n\n```", JSON.stringify(await getContent()));
+
+  // Case: Enter en `> a` continúa la cita.
+  await setContent("> a");
+  await focusEditor();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  check("Enter continúa la cita", (await getContent()) === "> a\n> ", JSON.stringify(await getContent()));
+
   for (const e of errors) {
     if (/reading 'then'|\.then.*undefined|panicked|assertion/i.test(e)) {
       problems.push("runtime error: " + e.split("\n")[0].slice(0, 160));

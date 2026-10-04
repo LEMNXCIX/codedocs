@@ -57,3 +57,5 @@ node_modules/
 .superpowers/
 #   public/live-preview.js         <- esbuild js/live-preview.mjs
 /public/live-preview.js
+#   public/markdown-input.js        <- esbuild js/markdown-input.mjs
+/public/markdown-input.js

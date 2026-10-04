@@ -5,6 +5,7 @@ import { languages } from "@codemirror/language-data";
 import { EditorState, Compartment, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { livePreviewExtension, livePreviewRefresh } from "./live-preview.mjs";
+import { markdownInputExtension } from "./markdown-input.mjs";
 
 const themeCompartment = new Compartment();
 
@@ -141,6 +142,7 @@ function getExtensions(isDark) {
         onChangeCallback(update.state.doc.toString());
       }
     }),
+    markdownInputExtension(),
   ];
 }
 

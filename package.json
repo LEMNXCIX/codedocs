@@ -12,6 +12,7 @@
     "fmt:check": "cargo fmt --all -- --check",
     "build:cm": "esbuild js/codemirror-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/codemirror-bridge.js --minify",
     "build:live": "esbuild js/live-preview.mjs --bundle --format=iife --target=es2020 --outfile=public/live-preview.js --minify",
+    "build:input": "esbuild js/markdown-input.mjs --bundle --format=iife --target=es2020 --outfile=public/markdown-input.js --minify",
     "build:preview": "esbuild js/preview-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/vendor/preview-bridge.js --minify",
     "check:bridge": "node scripts/check-bridge-contract.mjs",
     "verify": "npm run check:bridge && npm run check:tauri && cargo fmt --all -- --check && npm run lint:core && npm run test:core && npm run check:frontend && npm run check:backend",
