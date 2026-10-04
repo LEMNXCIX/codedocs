@@ -205,6 +205,12 @@ class MermaidWidget extends WidgetType {
     paintMermaid(el, this.source);
     return el;
   }
+  // Same as MathWidget: without it clicks and selection inside the diagram
+  // never reach CodeMirror, the caret stays put, and click-to-reveal of the
+  // block never fires.
+  ignoreEvent() {
+    return false;
+  }
 }
 
 class ImageWidget extends WidgetType {
@@ -229,6 +235,11 @@ class ImageWidget extends WidgetType {
     el.textContent = this.alt;
     if (this.src) el.title = this.src;
     return el;
+  }
+  // Same as MathWidget: clicks on the placeholder must reach CodeMirror so
+  // the caret moves and the line reveals its raw source.
+  ignoreEvent() {
+    return false;
   }
 }
 
