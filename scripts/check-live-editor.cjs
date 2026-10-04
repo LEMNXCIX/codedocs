@@ -78,8 +78,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 
+  // Always print `extra`, pass or fail. Without it a gate measuring 5 ms looks
+  // identical to one measuring 49 ms, and the only time the number appears is
+  // the run it starts failing — which is exactly the run nobody looks at.
   const check = (name, cond, extra) => {
-    if (cond) console.log(`  ok: ${name}`);
+    if (cond) console.log(`  ok: ${name}${extra ? ` — ${extra}` : ""}`);
     else problems.push(extra ? `${name} — ${extra}` : name);
   };
 
