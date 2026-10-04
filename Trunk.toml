@@ -8,8 +8,6 @@ ignore = [
     "./src-tauri",
     "./styles.css",
     "./public/codemirror-bridge.js",
-    "./public/live-preview.js",
-    "./public/markdown-input.js",
     "./public/vendor/preview-bridge.js",
 ]
 
@@ -29,16 +27,6 @@ command_arguments = ["tailwindcss", "-i", "./input.css", "-o", "./styles.css", "
 stage = "pre_build"
 command = "npx"
 command_arguments = ["esbuild", "js/codemirror-bridge.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/codemirror-bridge.js", "--minify"]
-
-[[hooks]]
-stage = "pre_build"
-command = "npx"
-command_arguments = ["esbuild", "js/live-preview.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/live-preview.js", "--minify"]
-
-[[hooks]]
-stage = "pre_build"
-command = "npx"
-command_arguments = ["esbuild", "js/markdown-input.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/markdown-input.js", "--minify"]
 
 # Was missing entirely, which is why editing js/preview-bridge.mjs had no
 # effect: the committed artifact was hand-edited and never rebuilt.
