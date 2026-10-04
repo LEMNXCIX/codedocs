@@ -151,7 +151,18 @@ pub fn RenameConfirmModal(
     let (new_name, set_new_name) = signal(initial_name.clone());
     // Guards against submitting an empty or unchanged name; the backend rejects
     // both, but failing here keeps the error out of the user's face.
-    let can_confirm = RwSignal::new(false);
+    //
+    // Named for what `ModalShell` asks for: this is the *disabled* state, not
+    // the permission. It used to be a `can_confirm` flag handed straight to
+    // that parameter, so the button came out greyed out exactly when the name
+    // was fine and live when it was empty — while Enter kept working, because
+    // `on:keydown` read the same variable as a condition instead of passing it
+    // through. Both paths now read this one signal.
+    //
+    // Starts `true` because the input already holds the current name: an
+    // enabled button here would let the user hit save without touching
+    // anything, send the name unchanged, and have the backend refuse it.
+    let confirm_disabled = RwSignal::new(true);
 
     let subtitle = format!("Ruta: {path}");
 
@@ -161,7 +172,7 @@ pub fn RenameConfirmModal(
             subtitle=subtitle
             confirm_label="Guardar cambios".to_string()
             confirm_kind="default"
-            confirm_disabled=can_confirm
+            confirm_disabled=confirm_disabled
             on_confirm=Callback::new(move |_| on_confirm.run(new_name.get().trim().to_string()))
             on_cancel
         >
@@ -175,11 +186,15 @@ pub fn RenameConfirmModal(
                 prop:value=move || new_name.get()
                 on:input=move |ev| {
                     let value = event_target_value(&ev);
-                    can_confirm.set(!value.trim().is_empty() && value.trim() != initial_name);
+                    let name = value.trim();
+                    let submittable = !name.is_empty() && name != initial_name;
+                    confirm_disabled.set(!submittable);
                     set_new_name.set(value);
                 }
+                // Reads the same signal the button renders from, so the two ways
+                // of confirming cannot disagree about what is submittable.
                 on:keydown=move |ev| {
-                    if ev.key() == "Enter" && can_confirm.get_untracked() {
+                    if ev.key() == "Enter" && !confirm_disabled.get_untracked() {
                         on_confirm.run(new_name.get().trim().to_string());
                     }
                 }
