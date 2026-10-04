@@ -1,0 +1,10 @@
+[package]
+name = "codedocs-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared, dependency-light core for CodeDocs: types, safe markdown rendering, workspace path validation and bounded file-tree walking."
+license = "MIT"
+
+[dependencies]
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+serde = { version = "1", features = ["derive"] }

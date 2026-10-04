@@ -28,5 +28,11 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Provides the `prose-*` utilities the preview pane uses. Without it those
+    // classes generate no CSS and the rendered document falls back to bare
+    // browser defaults. The hand-written `.prose` rules in input.css remain as
+    // the overrides, layered on top of the plugin's base styles.
+    require("@tailwindcss/typography"),
+  ],
 }

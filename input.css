@@ -258,6 +258,49 @@
   border-bottom-color: rgba(47, 47, 47, 0.5);
 }
 
+/* The renderer emits `<span class="math-display">` inside a paragraph, so it
+   needs its own line. `.math-inline` needs no layout change. */
+.prose .math-display {
+  display: block;
+  text-align: center;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Before KaTeX renders, the span still holds raw TeX: let it wrap instead of
+   pushing the paragraph wide. */
+.prose .math-display:not([data-cd-done]) {
+  white-space: pre-wrap;
+}
+
+/* The renderer emits `<pre class="mermaid-block">` holding the diagram source
+   as text content; preview-bridge replaces the contents with an <svg>. The
+   `!important` matches `.prose pre` above, which wins on specificity. */
+.prose .mermaid-block {
+  overflow-x: auto !important;
+  text-align: center;
+}
+
+.prose .mermaid-block svg {
+  display: inline-block;
+  height: auto;
+  /* Deliberately no max-width: an over-wide diagram should scroll inside the
+     block (see overflow-x above) rather than shrink into unreadability. */
+}
+
+/* Diagram source shown when mermaid fails to load or the diagram is invalid. */
+.prose .mermaid-block[data-cd-done] > pre {
+  text-align: left;
+  white-space: pre-wrap;
+  /* `!important` to beat the `.prose pre` rules above, which are important. */
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .codemirror-container .cm-editor {
   height: 100%;
   font-size: 14px;

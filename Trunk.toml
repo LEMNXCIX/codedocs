@@ -2,18 +2,35 @@
 target = "./index.html"
 
 [watch]
-ignore = ["./src-tauri", "./styles.css", "./public/codemirror-bridge.js"]
+# Generated output. Watching these would make every build retrigger itself,
+# since the build writes them into a directory trunk is watching.
+ignore = [
+    "./src-tauri",
+    "./styles.css",
+    "./public/codemirror-bridge.js",
+    "./public/vendor/preview-bridge.js",
+]
 
 [serve]
 port = 1425
 open = false
 
+# Hooks run cross-platform: the bare executable name resolves on Linux/macOS,
+# and the `.cmd` shim on Windows. Using `.cmd` explicitly broke the build on
+# every platform except Windows.
 [[hooks]]
 stage = "pre_build"
-command = "./node_modules/.bin/tailwindcss.cmd"
-command_arguments = ["-i", "./input.css", "-o", "./styles.css"]
+command = "npx"
+command_arguments = ["tailwindcss", "-i", "./input.css", "-o", "./styles.css", "--minify"]
 
 [[hooks]]
 stage = "pre_build"
-command = "./node_modules/.bin/esbuild.cmd"
-command_arguments = ["js/codemirror-bridge.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/codemirror-bridge.js", "--minify"]
+command = "npx"
+command_arguments = ["esbuild", "js/codemirror-bridge.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/codemirror-bridge.js", "--minify"]
+
+# Was missing entirely, which is why editing js/preview-bridge.mjs had no
+# effect: the committed artifact was hand-edited and never rebuilt.
+[[hooks]]
+stage = "pre_build"
+command = "npx"
+command_arguments = ["esbuild", "js/preview-bridge.mjs", "--bundle", "--format=iife", "--target=es2020", "--outfile=public/vendor/preview-bridge.js", "--minify"]

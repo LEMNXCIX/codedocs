@@ -1,27 +1,54 @@
 {
   "name": "codedocs",
-  "version": "1.0.0",
-  "description": "This template should help get you started developing with Tauri and Leptos.",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "Editor de Markdown de escritorio al estilo Typora, con Tauri 2 y Leptos",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build:cm": "esbuild js/codemirror-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/codemirror-bridge.js --minify"
+    "dev": "trunk serve",
+    "tauri": "cargo tauri dev",
+    "build": "trunk build --release",
+    "test": "cargo test -p codedocs-core",
+    "lint": "cargo clippy -p codedocs-core --all-targets -- -D warnings",
+    "fmt": "cargo fmt --all",
+    "fmt:check": "cargo fmt --all -- --check",
+    "build:cm": "esbuild js/codemirror-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/codemirror-bridge.js --minify",
+    "build:preview": "esbuild js/preview-bridge.mjs --bundle --format=iife --target=es2020 --outfile=public/vendor/preview-bridge.js --minify",
+    "check:bridge": "node scripts/check-bridge-contract.mjs",
+    "verify": "npm run check:bridge && npm run check:tauri && cargo fmt --all -- --check && npm run lint:core && npm run test:core && npm run check:frontend && npm run check:backend",
+    "lint:core": "cargo clippy -p codedocs-core --all-targets -- -D warnings",
+    "lint:backend": "cargo clippy -p codedocs --all-targets -- -D warnings",
+    "test:core": "cargo test -p codedocs-core",
+    "check:frontend": "cargo check --target wasm32-unknown-unknown",
+    "check:backend": "cargo check -p codedocs",
+    "check:tauri": "node scripts/check-tauri-contract.mjs",
+    "check:csp": "node scripts/check-csp-boot.cjs",
+    "check:preview": "node scripts/check-preview-render.cjs",
+    "verify:browser": "npm run build && npm run check:glue && npm run check:csp && npm run check:ipc && npm run check:preview",
+    "check:glue": "node scripts/check-tauri-glue.mjs",
+    "check:ipc": "node scripts/check-ipc-flow.cjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LEMNXCIX/codedocs.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "tauri",
+    "leptos",
+    "markdown",
+    "editor",
+    "wysiwyg",
+    "tauri-app"
+  ],
+  "author": "CodeDocs contributors",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/LEMNXCIX/codedocs/issues"
   },
   "homepage": "https://github.com/LEMNXCIX/codedocs#readme",
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
     "autoprefixer": "^10.4.23",
     "esbuild": "^0.28.0",
+    "playwright": "^1.63.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19"
   },
