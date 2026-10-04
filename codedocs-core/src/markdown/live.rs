@@ -485,11 +485,12 @@ fn push_span(content: &str, spans: &mut ByteSpans, mut start: usize, mut end: us
 /// and kept `Hide`s are non-overlapping and in `from` order (a newcomer
 /// overlaps iff it starts before the last kept end). The previous
 /// `kept_hides.iter().any(...)` + full-output scan were O(n²) — invisible
-/// on small notes, minutes-per-keystroke territory on a 5 000-line
+/// on small notes, ~60 ms medidos por pulsación on a 5 000-line
 /// document, where the live editor recomputes spans on every change.
 fn resolve(index: &Utf16Index, mut spans: ByteSpans) -> LiveSpans {
-    // Stable sort: ties keep emission order (inner constructs first), and the
-    // whole pipeline is deterministic, so reparse yields identical output.
+    // Sort by `(from, to)`: an outer span starts at or before any span it
+    // contains, so the outer sorts first and — kept first — wins, as the
+    // spec requires. The sort is stable, so reparse yields identical output.
     spans.sort_by_key(|a| (a.0, a.1));
     let mut out = LiveSpans::default();
     // End of the last kept `Hide`. Kept hides never overlap and arrive in
