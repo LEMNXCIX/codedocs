@@ -2,13 +2,30 @@ import { EditorView, basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { languages } from "@codemirror/language-data";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
+import { livePreviewExtension, livePreviewRefresh } from "./live-preview.mjs";
 
 const themeCompartment = new Compartment();
 
 let currentView = null;
 let onChangeCallback = null;
+// Live-format mode: the span provider labels document spans (markdown stays
+// the document), and `sourceVisible` shows the raw source with styling kept.
+let spanProvider = null;
+let sourceVisible = false;
+
+/** Re-run the live-preview plugin without touching the document. */
+function refreshLivePreview() {
+  if (currentView) {
+    currentView.dispatch({ effects: livePreviewRefresh.of(null) });
+  }
+}
+
+function setSourceVisible(isVisible) {
+  sourceVisible = !!isVisible;
+  refreshLivePreview();
+}
 
 /**
  * Formatting commands, keyed by the shortcut that triggers them.
@@ -76,10 +93,16 @@ function getExtensions(isDark) {
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     themeCompartment.of(isDark ? oneDark : []),
     EditorView.lineWrapping,
-    // Higher precedence than `basicSetup`'s default keymap: the toggle must not
-    // lose to a built-in that happens to share the binding.
-    keymap.of(
-      [
+    livePreviewExtension({
+      isSourceVisible: () => sourceVisible,
+      getSpanProvider: () => spanProvider,
+    }),
+    // `Prec.highest`, not a second `keymap.of` argument (which `Facet.of`
+    // ignores): without it this keymap ties with `basicSetup`'s default
+    // keymap, and `basicSetup` comes first in the array, so its `Mod-/`
+    // (toggleComment, which rewrites the document) wins over the toggle.
+    Prec.highest(
+      keymap.of([
         {
           key: "Mod-s",
           preventDefault: true,
@@ -100,8 +123,18 @@ function getExtensions(isDark) {
             return true;
           },
         },
-      ],
-      { precedence: "highest" },
+        // Source-visible toggle. Highest precedence, like the wrap keys:
+        // `basicSetup` binds Mod-/ to toggleComment, which would rewrite the
+        // document (`<!-- -->`) instead of revealing it.
+        {
+          key: "Mod-/",
+          preventDefault: true,
+          run: () => {
+            setSourceVisible(!sourceVisible);
+            return true;
+          },
+        },
+      ]),
     ),
     EditorView.updateListener.of((update) => {
       if (update.docChanged && onChangeCallback) {
@@ -166,6 +199,25 @@ window.__codedocs_destroyEditor = function () {
     currentView = null;
   }
   onChangeCallback = null;
+  spanProvider = null;
+  sourceVisible = false;
+};
+
+/**
+ * Registers the span provider the live-preview plugin calls with the full
+ * document text on every redecoration. The callback never modifies the
+ * document; it returns an `Array` of two elements: a `Uint32Array` with
+ * `ranges` (`[from0, to0, ...]`, UTF-16 units) and a `Uint8Array` with the
+ * `SpanTag` discriminants of `tags`.
+ */
+window.__codedocs_setSpanProvider = function (callback) {
+  spanProvider = typeof callback === "function" ? callback : null;
+  refreshLivePreview();
+};
+
+/** Shows (`true`) or hides (`false`) the raw markdown source. */
+window.__codedocs_setSourceVisible = function (isVisible) {
+  setSourceVisible(isVisible);
 };
 
 window.__codedocs_wrap_selection = function (wrapper) {

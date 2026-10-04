@@ -70,10 +70,10 @@ extern "C" {
 /// Mounts the editor once into a `NodeRef` div and then keeps the Rust signal
 /// and the editor in sync. Three details matter:
 ///
-/// * The change callback and the save callback are `Closure`s that must outlive
-///   this function, so they are leaked deliberately (`forget`) — the editor
-///   itself is destroyed in `on_cleanup`, which is what actually stops them
-///   being invoked.
+/// * The change callback, the span-provider callback and the save callback
+///   are `Closure`s that must outlive this function, so they are leaked
+///   deliberately (`forget`) — the editor itself is destroyed in `on_cleanup`,
+///   which is what actually stops them being invoked.
 /// * Content is only pushed into the editor when it differs from what the
 ///   editor last reported. Without that, the editor's own change event would
 ///   feed back into the signal and re-trigger the sync effect forever.

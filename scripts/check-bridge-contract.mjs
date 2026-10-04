@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const RUST_DIR = "src";
-const JS_FILES = ["js/codemirror-bridge.mjs", "js/preview-bridge.mjs"];
+const JS_FILES = ["js/codemirror-bridge.mjs", "js/live-preview.mjs", "js/preview-bridge.mjs"];
 
 /** Recursively collect Rust sources. */
 function rustSources(dir, out = []) {

@@ -45,7 +45,7 @@ use super::parser_options;
 /// Discriminants are explicit because they cross the IPC boundary to
 /// JavaScript; renumbering silently recolors every decoration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+#[repr(u8)]
 pub enum SpanTag {
     Hide = 0,
     Strong = 1,
@@ -479,12 +479,25 @@ fn push_span(content: &str, spans: &mut ByteSpans, mut start: usize, mut end: us
 }
 
 /// Sort, convert to UTF-16, and resolve `Hide` overlaps (outer wins).
+///
+/// Both dedup scans are O(1) per span, not O(kept): spans arrive sorted by
+/// `(from, to)`, so exact duplicates are adjacent (one lookback suffices)
+/// and kept `Hide`s are non-overlapping and in `from` order (a newcomer
+/// overlaps iff it starts before the last kept end). The previous
+/// `kept_hides.iter().any(...)` + full-output scan were O(n²) — invisible
+/// on small notes, minutes-per-keystroke territory on a 5 000-line
+/// document, where the live editor recomputes spans on every change.
 fn resolve(index: &Utf16Index, mut spans: ByteSpans) -> LiveSpans {
     // Stable sort: ties keep emission order (inner constructs first), and the
     // whole pipeline is deterministic, so reparse yields identical output.
     spans.sort_by_key(|a| (a.0, a.1));
     let mut out = LiveSpans::default();
-    let mut kept_hides: Vec<(u32, u32)> = Vec::new();
+    // End of the last kept `Hide`. Kept hides never overlap and arrive in
+    // `from` order, so `from < hide_end` is exactly "overlaps a kept hide".
+    // Starts at 0, which no span can be under (`from >= 0`).
+    let mut hide_end: u32 = 0;
+    // Last emitted span: sorted input puts exact duplicates adjacently.
+    let mut last: Option<(u32, u32, SpanTag)> = None;
     for (start, end, tag) in spans {
         let (Some(from), Some(to)) = (index.to_utf16(start), index.to_utf16(end)) else {
             continue;
@@ -496,25 +509,21 @@ fn resolve(index: &Utf16Index, mut spans: ByteSpans) -> LiveSpans {
             continue;
         }
         if tag == SpanTag::Hide {
-            // Outer wins: spans are sorted by `from`, and an outer span is
-            // emitted after (or at worst together with) any inner one it
-            // contains, so whatever is already kept takes precedence.
-            if kept_hides.iter().any(|&(s, e)| s < to && from < e) {
+            // Outer wins: whatever is already kept takes precedence, so an
+            // overlapping newcomer is discarded, as the spec requires.
+            if from < hide_end {
                 continue;
             }
-            kept_hides.push((from, to));
+            // `to > from >= hide_end`, so this also advances the end.
+            hide_end = to;
         }
         // Exact duplicates cannot arise from nested-or-disjoint gaps, but a
         // second guard costs nothing and keeps the JS side from decorating
         // the same range twice with the same tag.
-        if out
-            .ranges
-            .chunks_exact(2)
-            .zip(out.tags.iter())
-            .any(|(r, &t)| r[0] == from && r[1] == to && t == tag)
-        {
+        if last == Some((from, to, tag)) {
             continue;
         }
+        last = Some((from, to, tag));
         out.ranges.push(from);
         out.ranges.push(to);
         out.tags.push(tag);

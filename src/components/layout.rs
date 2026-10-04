@@ -7,7 +7,7 @@ use crate::components::header::EditorHeader;
 use crate::components::modals::{AlertModal, DeleteConfirmModal, RenameConfirmModal};
 use crate::components::sidebar::Sidebar;
 use crate::components::status_bar::StatusBar;
-use crate::state::{EditorState, SaveState};
+use crate::state::{EditorState, SaveState, ViewMode};
 use crate::utils::markdown::{extract_headings, render_markdown};
 
 /// Root layout: sidebar, editor pane, status bar, modals and toast.
@@ -33,9 +33,19 @@ pub fn Layout() -> impl IntoView {
     // Re-render the preview and outline whenever the buffer changes. Doing the
     // markdown parse in an effect rather than inline in `view!` keeps it off the
     // render path of every unrelated signal.
+    //
+    // The full-document HTML render is skipped while no preview pane is
+    // mounted (`Raw` mode): on a 5 000-line document it costs more than the
+    // live editor's whole per-keystroke pipeline, and nobody reads the
+    // result until a preview mounts. Tracking `view_mode` recomputes on the
+    // mode switch itself, so the preview is never stale when it appears.
+    // `headings` still updates every change — the sidebar outline reads it
+    // in every mode.
     Effect::new(move |_| {
         let content = state.content.get();
-        preview_html.set(render_markdown(&content));
+        if state.view_mode.get() != ViewMode::Raw {
+            preview_html.set(render_markdown(&content));
+        }
         state.headings.set(extract_headings(&content));
     });
 
