@@ -25,6 +25,8 @@
 mod live;
 mod math;
 mod sanitize;
+mod typst;
+mod typst_math;
 
 use std::collections::HashMap;
 
@@ -34,6 +36,7 @@ use live::Utf16Index;
 pub use live::{live_spans, LiveSpans, SpanTag};
 pub use math::{split_math, MathPiece};
 pub use sanitize::is_safe_url;
+pub use typst::markdown_to_typst;
 
 /// A heading extracted from a document, used to build the outline panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
