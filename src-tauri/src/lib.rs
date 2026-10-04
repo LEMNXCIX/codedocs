@@ -3,7 +3,7 @@ mod state;
 
 use crate::commands::{
     create_file, delete_file, list_markdown_files, open_project_folder, read_file, rename_file,
-    save_file, stop_watching, watch_folder,
+    save_file, save_file_as, stop_watching, watch_folder,
 };
 use crate::state::AppState;
 
@@ -15,6 +15,7 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             open_project_folder,
+            save_file_as,
             list_markdown_files,
             read_file,
             save_file,

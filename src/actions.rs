@@ -33,18 +33,87 @@ pub fn cancel_autosave(timer: Option<AutosaveTimer>) {
 /// that large the partial listing is far more useful than the message, and the
 /// banner turned every large folder into an error-looking screen.
 pub fn refresh_files(state: EditorState) {
-    let Some(path) = state.path.get_untracked() else {
+    let Some(folder) = state.path.get_untracked() else {
         return;
     };
     spawn_local(async move {
-        match tauri_bridge::list_markdown_files(&path).await {
-            Ok(tree) => state.files.set(tree.entries),
-            Err(err) => {
-                leptos::logging::error!("No se pudo listar archivos: {err}");
-                state.notify(err);
-            }
-        }
+        load_tree(state, &folder).await;
     });
+}
+
+/// Ask the backend for `folder`'s tree and show it.
+///
+/// Split out of [`refresh_files`] so a caller that needs the folder to *be* the
+/// workspace before it can write can await it. `save_file` resolves the path it
+/// is given against the open workspace, so the first save of a session has to
+/// wait for this instead of racing it.
+async fn load_tree(state: EditorState, folder: &str) {
+    match tauri_bridge::list_markdown_files(folder).await {
+        Ok(tree) => state.files.set(tree.entries),
+        Err(err) => {
+            leptos::logging::error!("No se pudo listar archivos: {err}");
+            state.notify(err);
+        }
+    }
+}
+
+/// The folder filesystem commands can run against, asking for one when there is
+/// none.
+///
+/// Both "create a file" and "save a document that has no file yet" start here,
+/// so the two cannot end up with different rules about when a folder is needed.
+/// `None` means the user dismissed the picker, which is not a failure worth a
+/// message — see [`is_cancelled`].
+pub async fn ensure_workspace(state: EditorState) -> Option<String> {
+    if let Some(folder) = state.path.get_untracked() {
+        return Some(folder);
+    }
+    // The browser build has no picker and no disk behind it; its demo tree
+    // stands in for a workspace, so there is nothing to ask for.
+    if !is_tauri() {
+        return None;
+    }
+    match tauri_bridge::open_project_folder().await {
+        Ok(folder) => {
+            adopt_workspace(state, folder.clone()).await;
+            Some(folder)
+        }
+        Err(err) => {
+            report_picker_failure(&state, "abrir la carpeta", &err);
+            None
+        }
+    }
+}
+
+/// Make `folder` the workspace: the sidebar lists it and the backend resolves
+/// paths against it.
+///
+/// Awaited rather than fired off, because a write issued in the same breath as
+/// the folder switch would be resolved against the *previous* workspace — or
+/// against none at all, which is what made the first save of a session fail with
+/// "no hay ninguna carpeta abierta".
+async fn adopt_workspace(state: EditorState, folder: String) {
+    state.path.set(Some(folder.clone()));
+    load_tree(state, &folder).await;
+}
+
+/// Whether a native dialog was dismissed rather than failing.
+///
+/// The backend reports a closed picker as an error string with fixed wording
+/// (`"Usuario cancelo la accion"`), because a command cannot return "nothing"
+/// through Tauri. Matching on the words is what keeps closing a dialog from
+/// being announced to the user as a red failure.
+pub fn is_cancelled(err: &str) -> bool {
+    err.contains("cancelo") || err.contains("cancel")
+}
+
+/// Report a picker failure, minus the "the user closed it" case.
+fn report_picker_failure(state: &EditorState, action: &str, err: &str) {
+    if is_cancelled(err) {
+        return;
+    }
+    leptos::logging::error!("No se pudo {action}: {err}");
+    state.notify(format!("No se pudo {action}: {err}"));
 }
 
 /// Persist the current buffer to disk.
@@ -52,14 +121,96 @@ pub fn refresh_files(state: EditorState) {
 /// Returns the new `SaveState` so callers can decide whether to surface a
 /// message; failures are never swallowed.
 pub async fn save_now(state: EditorState) -> SaveState {
+    // A save already in flight owns the outcome. `Mod-s` has two independent
+    // bindings — the global shortcut listener and the CodeMirror keymap — so one
+    // Ctrl+S reaches this twice; without the guard the path below would ask for
+    // a location twice, one native dialog per invocation.
+    if state.save_state.get_untracked() == SaveState::Saving {
+        return SaveState::Saving;
+    }
+
     let Some(path) = state.selected_file.get_untracked() else {
-        return SaveState::Idle;
+        return save_as_new_file(state).await;
     };
     let content = state.content.get_untracked();
     state.save_state.set(SaveState::Saving);
     let outcome = write_buffer(&path, &content, state).await;
     state.save_state.set(outcome.clone());
     outcome
+}
+
+/// Write a buffer that has no file yet, asking the user where it should live.
+///
+/// The old behaviour returned [`SaveState::Idle`] and did nothing: opening the
+/// app without a folder and pressing `Ctrl+S` looked like a broken shortcut.
+/// Now the file's folder *becomes* the workspace, which is what makes the write
+/// legal in the first place — the backend confines every path to the open
+/// workspace, and there was none.
+///
+/// Deliberately not reachable from [`schedule_autosave`]: typing must never pop
+/// a native dialog. The text waits in the buffer until the save is asked for.
+async fn save_as_new_file(state: EditorState) -> SaveState {
+    if !is_tauri() {
+        // Same reason [`write_buffer`] bails here: the browser demo has no
+        // filesystem to write to and no dialog to ask with.
+        return SaveState::Idle;
+    }
+
+    // Claimed before the picker opens, not after: while the dialog is up the
+    // buffer is still pending, and `save_now` uses this state to decide whether
+    // another save is already running.
+    let pending = state.save_state.get_untracked();
+    state.save_state.set(SaveState::Saving);
+
+    let route = match tauri_bridge::save_file_as().await {
+        Ok(route) => route,
+        Err(err) => {
+            report_picker_failure(&state, "guardar el archivo", &err);
+            return abandon(state, &pending);
+        }
+    };
+
+    // No folder to resolve the path against yet: the one the user just picked is
+    // installed first, then the write goes through the same path as any other
+    // save.
+    //
+    // The native picker always hands back an absolute path, so this is a guard
+    // rather than a branch anyone should see: writing anyway would fail with the
+    // backend's "no hay ninguna carpeta abierta", which says nothing about the
+    // path the user actually chose.
+    let Some(folder) = crate::components::header::parent_dir(&route) else {
+        leptos::logging::error!("La ruta elegida no tiene carpeta: '{route}'");
+        state.notify("Esa ubicación no se puede usar: falta la carpeta que la contiene");
+        return abandon(state, &pending);
+    };
+    adopt_workspace(state, folder).await;
+
+    let content = state.content.get_untracked();
+    let outcome = write_buffer(&route, &content, state).await;
+    if outcome == SaveState::Saved {
+        // Only now does the document have a name. Setting it before the write
+        // would let a failed write leave the header pointing at a file that does
+        // not exist, and the autosave would then retry forever.
+        state.selected_file.set(Some(route));
+        // The tree was loaded before the file existed, so the sidebar has to be
+        // asked again for the document to show up in it.
+        refresh_files(state);
+    }
+    // On failure `selected_file` is still `None`, so the next `Ctrl+S` asks for a
+    // location again instead of retrying a path that just failed, and the
+    // `Failed` state `write_buffer` reported is what stays on screen.
+    state.save_state.set(outcome.clone());
+    outcome
+}
+
+/// End a save that wrote nothing, putting the buffer back in the state it was in.
+///
+/// Restoring `pending` rather than picking a fresh state is what keeps cancelling
+/// the dialog from reading as "saved" or as "failed": the text is still only in
+/// memory, and the header dot has to keep saying so.
+fn abandon(state: EditorState, pending: &SaveState) -> SaveState {
+    state.save_state.set(pending.clone());
+    pending.clone()
 }
 
 /// Write `content` to `path`, updating `last_saved` on success.
@@ -90,6 +241,11 @@ async fn write_buffer(path: &str, content: &str, state: EditorState) -> SaveStat
 ///
 /// The content is captured *now* and written after the debounce, so a burst of
 /// keystrokes results in exactly one write of the final text.
+///
+/// Returns without scheduling when there is no file. That is intentional and is
+/// the reason this does not go through [`save_as_new_file`]: autosave must never
+/// open a native dialog, or typing would make a picker pop up mid-sentence. The
+/// text stays in the buffer until the save is asked for with `Ctrl+S`.
 pub fn schedule_autosave(state: EditorState, timer: RwSignal<Option<AutosaveTimer>>) {
     let Some(path) = state.selected_file.get_untracked() else {
         return;

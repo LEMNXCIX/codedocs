@@ -111,6 +111,14 @@ pub async fn open_project_folder() -> CommandResult<String> {
     invoke("open_project_folder", JsValue::NULL).await
 }
 
+/// Ask the backend where a document with no file yet should be written.
+///
+/// Takes no arguments: the native save dialog is configured entirely
+/// Rust-side (markdown filter, `untitled.md` as the starting name).
+pub async fn save_file_as() -> CommandResult<String> {
+    invoke("save_file_as", JsValue::NULL).await
+}
+
 pub async fn list_markdown_files(folder_path: &str) -> CommandResult<FileTree> {
     invoke(
         "list_markdown_files",

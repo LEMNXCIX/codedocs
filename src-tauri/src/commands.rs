@@ -41,6 +41,27 @@ pub async fn open_project_folder(app: AppHandle) -> Result<String, String> {
     }
 }
 
+/// Ask the user where to write a document that has no file yet.
+///
+/// Modelled on [`open_project_folder`] because it is the same interaction: an
+/// `async` command, so the native picker does not run on the main thread and
+/// freeze the webview, and the same cancellation wording, which the frontend
+/// matches to tell a dismissed dialog apart from a real failure. Changing that
+/// string turns every cancelled save into a red error toast.
+#[tauri::command]
+pub async fn save_file_as(app: AppHandle) -> Result<String, String> {
+    match app
+        .dialog()
+        .file()
+        .add_filter("Markdown", &["md", "markdown"])
+        .set_file_name("untitled.md")
+        .blocking_save_file()
+    {
+        Some(path) => Ok(path.to_string()),
+        None => Err("Usuario cancelo la accion".to_string()),
+    }
+}
+
 /// Walk `folder_path` and return its markdown tree, opening it as the workspace
 /// if it is not open yet.
 ///

@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos::reactive::spawn_local;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -226,10 +227,13 @@ impl EditorCommand {
             Self::Link => cm_insert_link(),
             Self::Focus => cm_focus(),
             Self::ToggleSource => state.source_mode.update(|b| *b = !*b),
-            Self::NewFile => match state.path.get_untracked() {
-                Some(folder) => crate::actions::create_file(state, folder),
-                None => state.notify("Abrí una carpeta antes de crear un archivo"),
-            },
+            Self::NewFile => spawn_local(async move {
+                // Same rule as the sidebar button: no folder means ask for one,
+                // not tell the user they cannot create a file.
+                if let Some(folder) = crate::actions::ensure_workspace(state).await {
+                    crate::actions::create_file(state, folder);
+                }
+            }),
         }
     }
 }

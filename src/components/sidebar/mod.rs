@@ -36,7 +36,6 @@ pub fn Sidebar(
         >
             <div class="p-6 border-b border-base-200 dark:border-base-800">
                 <Logo state />
-                <div class="mb-6"><ModeBadge /></div>
                 <TabSwitch active_tab set_active_tab />
                 {move || match active_tab.get() {
                     SidebarTab::Files => view! {
@@ -149,25 +148,6 @@ fn Logo(state: EditorState) -> impl IntoView {
     }
 }
 
-/// Native vs browser-demo indicator.
-#[component]
-fn ModeBadge() -> impl IntoView {
-    let native = is_tauri();
-    view! {
-        <div class="flex items-center gap-2 px-3 py-1 bg-base-100 dark:bg-base-800 rounded-full \
-                    border border-base-200 dark:border-base-700 w-fit">
-            <span class=move || format!(
-                "w-2 h-2 rounded-full {}",
-                if native { "bg-base-900" } else { "bg-brand-orange" }
-            )></span>
-            <span class="text-[10px] font-bold text-base-500 dark:text-base-400 uppercase \
-                         tracking-tighter">
-                {if native { "Escritorio (Nativo)" } else { "Web (Demo Mode)" }}
-            </span>
-        </div>
-    }
-}
-
 #[component]
 fn TabSwitch(
     active_tab: ReadSignal<SidebarTab>,
@@ -221,7 +201,7 @@ fn OpenFolderButton(state: EditorState) -> impl IntoView {
                 }
                 Err(err) => {
                     // The user closing the picker is not an error worth showing.
-                    if !err.contains("cancelo") && !err.contains("cancel") {
+                    if !actions::is_cancelled(&err) {
                         leptos::logging::error!("No se pudo abrir la carpeta: {err}");
                         state.notify(format!("No se pudo abrir la carpeta: {err}"));
                     }
