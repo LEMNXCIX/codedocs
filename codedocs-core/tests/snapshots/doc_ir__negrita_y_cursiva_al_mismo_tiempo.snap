@@ -1,0 +1,18 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"**negrita y *cursiva***\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "negrita y ",
+                marks: Bold,
+            },
+            Span {
+                text: "cursiva",
+                marks: Bold,
+            },
+        ],
+    },
+]

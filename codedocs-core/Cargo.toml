@@ -8,3 +8,14 @@ license = "MIT"
 [dependencies]
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# El hito 10. El IR tiene demasiados casos para enumerarlos a mano: cada
+# construcción de Markdown tiene un golden test que congela el árbol entero, y
+# `INSTA_UPDATE=always` regenera los archivos `.snap` cuando el parseo cambia a
+# propósito. Sin esto habría que escribir un `assert_eq!` por bloque y por
+# anidamiento, y el que más se olvida es el caso raro.
+#
+# Solo en `dev-dependencies`: `insta` no lo usa la librería, lo usan los tests, y
+# por eso la app Tauri no paga ni un binario por esto.
+insta = "1"

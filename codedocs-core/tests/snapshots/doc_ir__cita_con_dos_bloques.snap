@@ -1,0 +1,26 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"> primero\\n>\\n> segundo\\n\")"
+---
+[
+    Quote {
+        blocks: [
+            Paragraph {
+                spans: [
+                    Span {
+                        text: "primero",
+                        marks: None,
+                    },
+                ],
+            },
+            Paragraph {
+                spans: [
+                    Span {
+                        text: "segundo",
+                        marks: None,
+                    },
+                ],
+            },
+        ],
+    },
+]

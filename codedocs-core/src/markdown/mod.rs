@@ -162,7 +162,7 @@ enum BlockMode {
     Math,
 }
 
-fn fenced_lang(kind: &CodeBlockKind) -> Option<String> {
+pub(crate) fn fenced_lang(kind: &CodeBlockKind) -> Option<String> {
     match kind {
         CodeBlockKind::Fenced(info) => {
             let first = info.split_whitespace().next().unwrap_or("");
@@ -348,7 +348,14 @@ fn emit_heading<'a>(
 ///
 /// Two headings with the same text must get different ids or the outline would
 /// scroll both entries to the first one.
-fn unique_slug(text: &str, used: &mut HashMap<String, usize>) -> String {
+///
+/// `pub(crate)` desde el hito 10, cuando apareció [`crate::doc`]. El motivo
+/// concreto es que el IR tiene que producir **el mismo** `id` que este renderer,
+/// y la forma barata de garantizarlo es compartir el asignador en vez de
+/// duplicar la regla. Lo que **no** se hizo fue mover la función: sigue viviendo
+/// acá, junto a `slugify`, y `render_markdown` no se tocó. Lo único que cambió es
+/// la visibilidad, que es lo que hace el milestone aditivo de verdad.
+pub(crate) fn unique_slug(text: &str, used: &mut HashMap<String, usize>) -> String {
     let base = slugify(text);
     let base = if base.is_empty() {
         "seccion".to_string()

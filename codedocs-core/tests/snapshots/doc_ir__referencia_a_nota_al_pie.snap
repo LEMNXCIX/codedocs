@@ -1,0 +1,26 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"texto[^1]\\n\\n[^1]: la nota\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "texto",
+                marks: None,
+            },
+            Span {
+                text: "[^1]",
+                marks: None,
+            },
+        ],
+    },
+    Paragraph {
+        spans: [
+            Span {
+                text: "la nota",
+                marks: None,
+            },
+        ],
+    },
+]

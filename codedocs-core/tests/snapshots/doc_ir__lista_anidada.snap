@@ -1,0 +1,52 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"- uno\\n  - uno.a\\n  - uno.b\\n- dos\\n\")"
+---
+[
+    List {
+        ordered: false,
+        items: [
+            [
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "uno.a",
+                            marks: None,
+                        },
+                    ],
+                },
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "uno.b",
+                            marks: None,
+                        },
+                    ],
+                },
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "dos",
+                            marks: None,
+                        },
+                    ],
+                },
+            ],
+        ],
+    },
+    List {
+        ordered: false,
+        items: [
+            [
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "uno",
+                            marks: None,
+                        },
+                    ],
+                },
+            ],
+        ],
+    },
+]

@@ -1,0 +1,37 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"- [x] hecho\\n- [ ] pendiente\\n\")"
+---
+[
+    List {
+        ordered: false,
+        items: [
+            [
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "[x] ",
+                            marks: None,
+                        },
+                        Span {
+                            text: "hecho",
+                            marks: None,
+                        },
+                    ],
+                },
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "[ ] ",
+                            marks: None,
+                        },
+                        Span {
+                            text: "pendiente",
+                            marks: None,
+                        },
+                    ],
+                },
+            ],
+        ],
+    },
+]

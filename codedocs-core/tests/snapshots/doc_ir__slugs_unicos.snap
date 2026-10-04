@@ -1,0 +1,36 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"# Notas\\n\\n# Notas\\n\\n# Notas\\n\")"
+---
+[
+    Heading {
+        level: 1,
+        id: "notas",
+        spans: [
+            Span {
+                text: "Notas",
+                marks: None,
+            },
+        ],
+    },
+    Heading {
+        level: 1,
+        id: "notas-1",
+        spans: [
+            Span {
+                text: "Notas",
+                marks: None,
+            },
+        ],
+    },
+    Heading {
+        level: 1,
+        id: "notas-2",
+        spans: [
+            Span {
+                text: "Notas",
+                marks: None,
+            },
+        ],
+    },
+]

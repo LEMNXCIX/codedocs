@@ -1,0 +1,12 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"<script>alert(1)</script>\\n\\n<div>texto util</div>\\n\")"
+---
+[
+    Opaque {
+        text: "",
+    },
+    Opaque {
+        text: "texto util",
+    },
+]

@@ -1,0 +1,28 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"[bueno](https://ok.example) y [malo](javascript:alert(1))\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "bueno",
+                marks: Link {
+                    url: Some(
+                        "https://ok.example",
+                    ),
+                },
+            },
+            Span {
+                text: " y ",
+                marks: None,
+            },
+            Span {
+                text: "malo",
+                marks: Link {
+                    url: None,
+                },
+            },
+        ],
+    },
+]

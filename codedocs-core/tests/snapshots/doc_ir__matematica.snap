@@ -1,0 +1,22 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"valor $x^2$ aqui\\n\\n$$a+b$$\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "valor $x^2$ aqui",
+                marks: None,
+            },
+        ],
+    },
+    Paragraph {
+        spans: [
+            Span {
+                text: "$$a+b$$",
+                marks: None,
+            },
+        ],
+    },
+]

@@ -1,0 +1,32 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"# Título\\n\\nUn poco de *texto*.\\n\")"
+---
+[
+    Heading {
+        level: 1,
+        id: "título",
+        spans: [
+            Span {
+                text: "Título",
+                marks: None,
+            },
+        ],
+    },
+    Paragraph {
+        spans: [
+            Span {
+                text: "Un poco de ",
+                marks: None,
+            },
+            Span {
+                text: "texto",
+                marks: Italic,
+            },
+            Span {
+                text: ".",
+                marks: None,
+            },
+        ],
+    },
+]

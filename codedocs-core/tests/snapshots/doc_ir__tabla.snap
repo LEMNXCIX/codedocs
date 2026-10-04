@@ -1,0 +1,52 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"| a | b |\\n|---|---|\\n| 1 | 2 |\\n| 3 | 4 |\\n\")"
+---
+[
+    Table {
+        header: [
+            [
+                Span {
+                    text: "a",
+                    marks: None,
+                },
+            ],
+            [
+                Span {
+                    text: "b",
+                    marks: None,
+                },
+            ],
+        ],
+        rows: [
+            [
+                [
+                    Span {
+                        text: "1",
+                        marks: None,
+                    },
+                ],
+                [
+                    Span {
+                        text: "2",
+                        marks: None,
+                    },
+                ],
+            ],
+            [
+                [
+                    Span {
+                        text: "3",
+                        marks: None,
+                    },
+                ],
+                [
+                    Span {
+                        text: "4",
+                        marks: None,
+                    },
+                ],
+            ],
+        ],
+    },
+]

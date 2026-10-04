@@ -1,0 +1,10 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"```\\nlet x = 1;\\n```\\n\")"
+---
+[
+    CodeBlock {
+        lang: None,
+        code: "let x = 1;\n",
+    },
+]

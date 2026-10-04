@@ -1,0 +1,29 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"3. uno\\n4. dos\\n\")"
+---
+[
+    List {
+        ordered: true,
+        items: [
+            [
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "uno",
+                            marks: None,
+                        },
+                    ],
+                },
+                Paragraph {
+                    spans: [
+                        Span {
+                            text: "dos",
+                            marks: None,
+                        },
+                    ],
+                },
+            ],
+        ],
+    },
+]

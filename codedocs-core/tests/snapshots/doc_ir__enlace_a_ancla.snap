@@ -1,0 +1,18 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"[ir ahi](#seccion)\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "ir ahi",
+                marks: Link {
+                    url: Some(
+                        "#seccion",
+                    ),
+                },
+            },
+        ],
+    },
+]

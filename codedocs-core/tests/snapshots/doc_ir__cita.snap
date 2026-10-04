@@ -1,0 +1,26 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"> citado\\n> más\\n\")"
+---
+[
+    Quote {
+        blocks: [
+            Paragraph {
+                spans: [
+                    Span {
+                        text: "citado",
+                        marks: None,
+                    },
+                    Span {
+                        text: " ",
+                        marks: None,
+                    },
+                    Span {
+                        text: "más",
+                        marks: None,
+                    },
+                ],
+            },
+        ],
+    },
+]

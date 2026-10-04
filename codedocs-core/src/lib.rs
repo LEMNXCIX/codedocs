@@ -14,6 +14,12 @@
 //! The filesystem modules are compiled for native targets only; the frontend
 //! has no business walking directories.
 
+//! * [`doc`] — the document IR: the contract between parsing Markdown and
+//!   painting it. It exists because [`markdown::render_markdown`] returns HTML,
+//!   which a webview paints and GPUI cannot. Additive: the HTML path is
+//!   untouched and stays the one the Tauri app uses.
+
+pub mod doc;
 pub mod markdown;
 mod types;
 

@@ -1,0 +1,12 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"```rust\\nfn main() {}\\n```\\n\")"
+---
+[
+    CodeBlock {
+        lang: Some(
+            "rust",
+        ),
+        code: "fn main() {}\n",
+    },
+]

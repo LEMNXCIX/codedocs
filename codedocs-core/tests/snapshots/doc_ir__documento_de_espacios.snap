@@ -1,0 +1,5 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"   \\n\\n  \\n\")"
+---
+[]

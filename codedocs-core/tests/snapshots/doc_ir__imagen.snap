@@ -1,0 +1,18 @@
+---
+source: codedocs-core/tests/doc_ir.rs
+expression: "parse_document(\"![alt aqui](https://ok.example/a.png)\\n\")"
+---
+[
+    Paragraph {
+        spans: [
+            Span {
+                text: "alt aqui",
+                marks: Link {
+                    url: Some(
+                        "https://ok.example/a.png",
+                    ),
+                },
+            },
+        ],
+    },
+]
