@@ -137,7 +137,7 @@ estructural. El detalle de cada punto está en el módulo o archivo donde vive.
 | Abrir/Guardar/Crear/Eliminar/Renombrar | ✅ | Commands Tauri, todos confinados al `Workspace` abierto |
 | Escritura atómica | ✅ | Temporal + `rename`; tope de 5 MB por documento |
 | Editor | ✅ | CodeMirror 6 con `lang-markdown` y resaltado por lenguaje (ya no `<textarea>`) |
-| Modos de vista | ✅ | Raw `Ctrl+1` · Format `Ctrl+2` · **Split `Ctrl+3`** · toggle `Ctrl+0` |
+| Modos de vista | ✅ | Un solo modo vivo · `Ctrl+/` muestra la fuente Markdown |
 | Preview | ✅ | `pulldown-cmark`: tablas GFM, notas al pie, tachado, tasklists, smart punctuation, atributos de encabezado |
 | Render backend | ✅ | Uno solo: `codedocs_core::render_markdown`, compartido por frontend y backend |
 | Math (KaTeX) | ✅ | `$…$` y `$$…$$`, con carga diferida |
@@ -414,8 +414,8 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 #### 1.5 — Modos de vista
 
 - [x] **Source Mode**: Editor CM6 a la izquierda, preview a la derecha (split pane actual)
-- [ ] **Live Preview Mode**: Editor CM6 solo, con preview inline para elementos bloque (como VS Code)
-  - **No implementado.** No hay `ViewPlugin` ni `Decoration` de CodeMirror. Lo que existe hoy es el pane Split.
+- [x] **Live Preview Mode**: editor en vivo, único modo (formato aplicado
+  mientras escribís, `Ctrl+/` muestra la fuente)
 - [x] **Reader Mode**: Solo preview, sin editor
   - Se llama "Format" en la UI (`Ctrl+2`)
 - [x] Toggle entre modos con botón o atajo
@@ -577,7 +577,7 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
   - [ ] Posición del cursor (Línea:Col)
   - [ ] Encoding (UTF-8)
   - [ ] Tipo de archivo (Markdown)
-  - [x] Modo de vista actual — selector segmentado Raw / Split / Format, que además es el toggle
+  - [x] Modo de vista actual — un solo modo vivo; `Ctrl+/` muestra la fuente Markdown
   - [x] Indicador de guardado — `Sin guardar` / `Guardando…` / `Guardado` / `Error al guardar`
   - También tiene los botones Guardar (`Ctrl+S`) y Limpiar editor, que no estaban en el plan original.
 

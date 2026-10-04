@@ -180,13 +180,14 @@ fn demo_content(full_path: &str) -> String {
     match full_path {
         "C:\\Demo\\Documents\\Bienvenido.md" => {
             "# 👋 Bienvenido a CodeDocs\n\nEsta es una **demo interactiva** en la web.\n\n\
-             ### Características:\n- Edición rápida\n- Previsualización en tiempo real\n- \
+             ### Características:\n- Edición en vivo con formato aplicado\n- \
+             `Ctrl+/` muestra la fuente Markdown\n- \
              Soporte para plantillas"
                 .to_string()
         }
         "C:\\Demo\\Documents\\Guía_Rápida.md" => {
             "# ⚡ Guía Rápida\n\n1. Selecciona un archivo.\n2. Edita su contenido.\n\
-             3. Mira la preview a la derecha."
+             3. El formato se aplica mientras escribís; `Ctrl+/` muestra la fuente."
                 .to_string()
         }
         _ => "# 📂 Archivo Demo\n\nContenido de ejemplo para la versión web.".to_string(),

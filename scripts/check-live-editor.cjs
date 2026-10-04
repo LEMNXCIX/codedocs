@@ -119,13 +119,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.evaluate(() => typeof window.__codedocs_setSourceVisible === "function"),
   );
 
-  // The app boots in Formatted mode (preview only). Ctrl+1 switches to Raw
-  // so the CodeMirror instance mounts.
-  await page.keyboard.press("Control+1");
+  // The editor boots live (formatted in place); the CodeMirror instance
+  // mounts with the app, so no mode switch is needed before driving it.
   try {
     await page.waitForSelector(".cm-editor .cm-content", { timeout: 8000 });
   } catch {
-    problems.push("el editor no montó tras Ctrl+1");
+    problems.push("el editor no montó al arrancar");
     console.error(`FAIL: ${problems.length} problem(s):`);
     for (const p of problems) console.error("  - " + p);
     await browser.close();
@@ -478,11 +477,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   page2.on("pageerror", (e) => errors2.push("pageerror: " + e.message));
   await page2.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
   await page2.waitForTimeout(2000);
-  await page2.keyboard.press("Control+1");
   try {
     await page2.waitForSelector(".cm-editor .cm-content", { timeout: 8000 });
   } catch {
-    problems.push("sin KaTeX: el editor no montó tras Ctrl+1");
+    problems.push("sin KaTeX: el editor no montó al arrancar");
   }
   await page2.evaluate((t) => window.__codedocs_setContent(t), "$x^2$\ncola");
   await page2.click(".cm-editor .cm-content"); // foco: sin esto el teclado no entra

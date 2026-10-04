@@ -107,8 +107,11 @@ Función propia, con tests que usan acentos y emojis explícitamente.
 
 ### 3. `js/live-preview.mjs` — el `ViewPlugin` de CodeMirror
 
-Traduce los tramos a `Decoration.replace` (ocultar), `Decoration.mark`
-(estilizar) y widgets. Recalcula por transacción y por cambio de selección.
+Traduce los tramos a `Decoration.mark` con `font-size: 0` (ocultar),
+`Decoration.mark` (estilizar) y widgets (`Decoration.replace`). Lo oculto no
+usa `replace`: un spike midió que `replace` rompe el markdown al copiar
+(select-all + copy pierde el `**` de apertura) y que `display: none` atasca
+el caret en el offset. Recalcula por transacción y por cambio de selección.
 
 ## Flujo por tecla
 

@@ -2,7 +2,8 @@
 
 Editor de Markdown de escritorio, al estilo Typora, construido con **Tauri 2 +
 Leptos 0.8 (CSR) + CodeMirror 6**. CodeDocs abre una carpeta como proyecto, muestra
-el árbol de `.md` en el sidebar y los renderiza en un preview en vivo con tablas,
+el árbol de `.md` en el sidebar y los edita en un editor en vivo que aplica
+el formato mientras escribís, con tablas,
 notas al pie, ~~tachado~~, listas de tareas, matemáticas con KaTeX y diagramas
 Mermaid. Todo el backend es Rust; no hay servidor, ni cuenta, ni telemetría.
 
@@ -21,17 +22,18 @@ El editor abre **una carpeta a la vez**, no un archivo suelto: el documento, el
   atómica (archivo temporal + `rename`) y hay un tope de 5 MB por documento.
 - **Editor CodeMirror 6** con resaltado de Markdown y resaltado del lenguaje
   dentro de los bloques de código.
-- **Preview en vivo** con tablas GFM, notas al pie, tachado, listas de tareas y
-  puntuación tipográfica. KaTeX y Mermaid se **cargan bajo demanda**: un
+- **Editor en vivo** con tablas GFM, notas al pie, tachado, listas de tareas y
+  puntuación tipográfica, renderizados dentro del propio editor. KaTeX y
+  Mermaid se **cargan bajo demanda**: un
   documento sin matemáticas ni diagramas no los descarga nunca.
 - **Panel de contenido (outline)** con los encabezados del documento en vivo; al
-  hacer click se desplaza el preview hasta esa sección.
+  hacer click mueve el cursor del editor hasta esa sección.
 - **Auto-guardado con rebote** de 1,5 s, más `Ctrl+S` y un botón de guardar.
 - **Indicador de estado de guardado** en el header y en la barra de estado:
   `Sin guardar` / `Guardando…` / `Guardado` / `Error al guardar`.
 - **Detección de cambios externos** con `notify`: si editás el archivo desde otro
-  programa, el preview se recarga solo (siempre que no tengas cambios sin
-  guardar).
+  programa, el editor recarga su contenido solo (siempre que no tengas cambios
+  sin guardar).
 - **Editor en vivo**: el formato se muestra directamente mientras escribís, sin
   panel de preview separado. `Ctrl+/` alterna la vista de la fuente Markdown
   (con el estilo conservado).
@@ -73,7 +75,7 @@ npm run build:cm         # recompila solo el puente de CodeMirror
 npm run build:preview    # recompila solo el puente de KaTeX/Mermaid
 ```
 
-Los dos `build:*` existen porque los bundles de `js/*.mjs` **no** se versionan
+Los `build:cm` y `build:preview` existen porque los bundles de `js/*.mjs` **no** se versionan
 (los regenera el hook `pre_build` de `Trunk.toml`). Si tocás un `.mjs`, corré el
 script correspondiente o compilá una vez; si no, tu cambio no se ve.
 
