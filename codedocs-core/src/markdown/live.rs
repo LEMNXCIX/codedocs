@@ -68,6 +68,16 @@ pub enum SpanTag {
     MathInline = 18,
     MathDisplay = 19,
     MermaidBlock = 20,
+    /// Code block body (fenced or four-space indented), styled so the block
+    /// reads delimited instead of floating bare.
+    CodeBlockBody = 21,
+    /// Thematic break (`---`): the dashes hide while the tag styles the
+    /// line itself, like quotes do.
+    Hr = 22,
+    /// Inline footnote reference (`[^1]`).
+    FootnoteRef = 23,
+    /// Footnote definition label (`[^1]: `); styles its line as a block.
+    FootnoteDef = 24,
 }
 
 /// Flat span list over a document, in UTF-16 code units.
@@ -204,6 +214,27 @@ pub fn live_spans(content: &str) -> LiveSpans {
                     emit_math_spans(content, range.start, range.end, &mut spans);
                 }
             }
+            Event::Rule => {
+                if let Some(parent) = stack.last_mut() {
+                    push_child(parent, range.start, range.end);
+                }
+                // A rule reads as a line: the dashes hide (as quote markers
+                // do) while the `Hr` tag styles the line itself.
+                push_span(content, &mut spans, range.start, range.end, SpanTag::Hide);
+                push_span(content, &mut spans, range.start, range.end, SpanTag::Hr);
+            }
+            Event::FootnoteReference(_) => {
+                if let Some(parent) = stack.last_mut() {
+                    push_child(parent, range.start, range.end);
+                }
+                push_span(
+                    content,
+                    &mut spans,
+                    range.start,
+                    range.end,
+                    SpanTag::FootnoteRef,
+                );
+            }
             _ => {
                 // Leaf events without their own spans (soft breaks, task
                 // markers, …) still occupy source, so they count as children
@@ -263,6 +294,11 @@ fn emit_node(content: &str, frame: &Frame, spans: &mut ByteSpans) {
     if frame.end > cursor {
         gaps.push((cursor, frame.end));
     }
+
+    // Blank gaps (pure indentation or padding: the `  ` before a nested
+    // bullet, the space around a task checkbox) are structure, not syntax:
+    // no construct hides them, so they never reach the tag arms below.
+    gaps.retain(|&(s, e)| !is_blank_gap(content, s, e));
 
     // Style span over the children union, e.g. the `a` in `**a**`.
     let inner = || (first_start, last_end);
@@ -327,13 +363,30 @@ fn emit_node(content: &str, frame: &Frame, spans: &mut ByteSpans) {
                 SpanTag::ListMarker,
             );
             for (s, e) in gaps {
+                if s < first_start {
+                    // The bullet itself (`- `, `1. `): the only signal the
+                    // line is a list, so visible by design, never syntax.
+                    continue;
+                }
                 push_span(content, spans, s, e, SpanTag::Hide);
             }
         }
         Tag::CodeBlock(kind) => {
-            for (s, e) in gaps {
-                push_span(content, spans, s, e, SpanTag::Fence);
+            if matches!(kind, CodeBlockKind::Fenced(_)) {
+                for (s, e) in gaps {
+                    push_span(content, spans, s, e, SpanTag::Fence);
+                }
             }
+            // Body over the children union (the code itself, fences
+            // excluded). Indented blocks start at the line start so the
+            // four-space indent shares the background; there is no fence
+            // to hide there. Marks inside a mermaid-replaced range are
+            // inert (fence marks already overlap it today).
+            let (mut s, e) = inner();
+            if matches!(kind, CodeBlockKind::Indented) {
+                s = line_start(content, s);
+            }
+            push_span(content, spans, s, e, SpanTag::CodeBlockBody);
             if is_mermaid(kind) {
                 push_span(
                     content,
@@ -342,6 +395,17 @@ fn emit_node(content: &str, frame: &Frame, spans: &mut ByteSpans) {
                     frame.end,
                     SpanTag::MermaidBlock,
                 );
+            }
+        }
+        Tag::FootnoteDefinition(_) => {
+            for (s, e) in gaps {
+                if e <= first_start {
+                    // The `[^1]: ` label: visible, and styles its line as a
+                    // block via the line pass.
+                    push_span(content, spans, s, e, SpanTag::FootnoteDef);
+                } else {
+                    push_span(content, spans, s, e, SpanTag::Hide);
+                }
             }
         }
         Tag::Table(..) => {
@@ -455,6 +519,20 @@ fn emit_math_spans(content: &str, start: usize, end: usize, spans: &mut ByteSpan
             }
         }
     }
+}
+
+/// A gap that carries no visible syntax: pure whitespace (indents, padding
+/// around a task checkbox, blank lines) is structure, never hidden.
+fn is_blank_gap(content: &str, start: usize, end: usize) -> bool {
+    content
+        .get(start..end)
+        .is_some_and(|s| s.bytes().all(|b| matches!(b, b' ' | b'\t' | b'\r' | b'\n')))
+}
+
+/// Byte offset of the start of the line holding `offset` (the indent of an
+/// indented code block lives there, outside the parser's frame).
+fn line_start(content: &str, offset: usize) -> usize {
+    content[..offset].rfind('\n').map_or(0, |i| i + 1)
 }
 
 /// Push one byte-range span, trimmed of line breaks (a decoration over `\n`
@@ -702,10 +780,101 @@ mod tests {
     }
 
     #[test]
-    fn list_item_marks_bullet() {
-        let got = spans("- item");
-        assert!(got.contains(&(0, 2, SpanTag::Hide)), "{got:?}");
-        assert!(got.contains(&(0, 2, SpanTag::ListMarker)), "{got:?}");
+    fn list_marker_is_visible_not_hidden() {
+        // `- item`: the bullet is the only signal it is a list, so it is
+        // styled, never hidden.
+        assert_eq!(spans("- item"), vec![(0, 2, SpanTag::ListMarker)]);
+    }
+
+    #[test]
+    fn nested_list_indent_is_not_hidden() {
+        // `- uno / - anidada / - profunda`: each bullet styled, each indent
+        // visible, no Hide anywhere (every gap is either the marker itself
+        // or pure whitespace).
+        let got = spans("- uno\n  - anidada\n    - profunda\n");
+        for (s, e) in [(0, 2), (8, 10), (22, 24)] {
+            assert!(
+                got.contains(&(s, e, SpanTag::ListMarker)),
+                "missing marker {s}..{e}: {got:?}"
+            );
+        }
+        assert!(
+            !got.iter().any(|&(_, _, t)| t == SpanTag::Hide),
+            "indents must stay visible: {got:?}"
+        );
+    }
+
+    #[test]
+    fn task_checkbox_gap_is_not_hidden() {
+        // `- [ ] tarea`: byte 5 is the space between `]` and `tarea`.
+        // Collapsing it glues the text to the checkbox, so no Hide may
+        // cover 5..6. Asserted on the range, not on a whole string.
+        let got = spans("- [ ] tarea");
+        assert!(
+            !got.iter()
+                .any(|&(s, e, t)| t == SpanTag::Hide && s < 6 && 5 < e),
+            "{got:?}"
+        );
+    }
+
+    #[test]
+    fn whitespace_only_gaps_are_never_hidden() {
+        // Generalized indent rule: in no construct is a gap of pure
+        // whitespace syntax, so none may hide.
+        for src in [
+            "- [ ] tarea",
+            "- uno\n  - anidada\n    - profunda\n",
+            "1. uno\n2. dos\n",
+            "```\na\n\nb\n```\n",
+        ] {
+            for &(s, e, t) in &spans(src) {
+                if t == SpanTag::Hide {
+                    let slice = &src[s as usize..e as usize];
+                    assert!(
+                        slice
+                            .bytes()
+                            .any(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n')),
+                        "blank Hide {s}..{e} in {src:?}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fenced_code_body_is_styled_and_fences_stay_hidden() {
+        // Fences hide (as before); the body gets its own style span so it
+        // no longer floats undelimited.
+        let got = spans("```rust\ncode\n```");
+        assert!(got.contains(&(0, 7, SpanTag::Fence)), "{got:?}");
+        assert!(got.contains(&(13, 16, SpanTag::Fence)), "{got:?}");
+        assert!(got.contains(&(8, 12, SpanTag::CodeBlockBody)), "{got:?}");
+        assert!(!got.iter().any(|&(_, _, t)| t == SpanTag::Hide), "{got:?}");
+    }
+
+    #[test]
+    fn indented_code_body_is_styled() {
+        // Four-space indented block: no fence to hide, the body (indent
+        // included, for a full-bleed background) is styled.
+        let got = spans("para\n\n    code\n");
+        assert!(got.contains(&(6, 14, SpanTag::CodeBlockBody)), "{got:?}");
+        assert!(!got.iter().any(|&(_, _, t)| t == SpanTag::Hide), "{got:?}");
+    }
+
+    #[test]
+    fn rule_hides_dashes_and_marks_the_line() {
+        // `---` reads as a line: the dashes hide (as quote markers do)
+        // while the Hr tag styles the line itself.
+        let got = spans("a\n\n---\n\nb\n");
+        assert!(got.contains(&(3, 6, SpanTag::Hide)), "{got:?}");
+        assert!(got.contains(&(3, 6, SpanTag::Hr)), "{got:?}");
+    }
+
+    #[test]
+    fn footnote_ref_and_definition_are_marked() {
+        let got = spans("texto[^1]\n\n[^1]: pie\n");
+        assert!(got.contains(&(5, 9, SpanTag::FootnoteRef)), "{got:?}");
+        assert!(got.contains(&(11, 17, SpanTag::FootnoteDef)), "{got:?}");
     }
 
     #[test]

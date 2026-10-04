@@ -368,6 +368,41 @@
   font-style: italic;
 }
 
+/* List bullets are content, not syntax: muted, never hidden, and always the
+   source character (`-`, `*`, `1.` — never a normalized replacement). */
+.cm-editor .cm-lp-listmarker { color: #6B7280; }
+
+/* Code block bodies read delimited like inline code: same background, padding
+   and radius. No `font-family` needed — `.cm-scroller` already sets a
+   monospace stack for the whole editor. Fences stay hidden; the body is what
+   remains visible. */
+.cm-editor .cm-lp-codeblock {
+  background-color: #E6E7E7;
+  padding: 0 0.3em;
+  border-radius: 0.25rem;
+}
+
+/* Thematic breaks: the dashes hide (a `Hide` span) and the line draws the
+   rule. Padding keeps the empty line tall enough to show it. */
+.cm-editor .cm-lp-hr {
+  border-bottom: 2px solid #C9CDD2;
+  padding: 0.2em 0;
+}
+
+/* Footnote reference: small and blue, like a link but clearly not one. */
+.cm-editor .cm-lp-footnote-ref {
+  color: #1d4ed8;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+/* Footnote definition reads as a block with a muted rail, like a quote. */
+.cm-editor .cm-lp-footnote-def {
+  border-left: 3px solid #9CA3AF;
+  padding-left: 0.75rem;
+  font-size: 0.9em;
+}
+
 /* Table rows are NOT a real <table>: one would fight CodeMirror for the
    caret and for per-cell selection, so rows stay lines with their pipes
    hidden (see TAG_TABLE_PIPE) and lay out as flex, keeping the cells of a
@@ -409,3 +444,8 @@
 .dark .cm-editor .cm-lp-link { color: #93c5fd; }
 .dark .cm-editor .cm-lp-quote { border-left-color: var(--brand-orange); }
 .dark .cm-editor .cm-lp-image { background-color: #3D3E3E; border-color: #5F6060; }
+.dark .cm-editor .cm-lp-listmarker { color: #9CA3AF; }
+.dark .cm-editor .cm-lp-codeblock { background-color: #3D3E3E; }
+.dark .cm-editor .cm-lp-hr { border-bottom-color: #4B5563; }
+.dark .cm-editor .cm-lp-footnote-ref { color: #93c5fd; }
+.dark .cm-editor .cm-lp-footnote-def { border-left-color: #6B7280; }
