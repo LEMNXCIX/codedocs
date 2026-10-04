@@ -143,19 +143,19 @@ estructural. El detalle de cada punto está en el módulo o archivo donde vive.
 | Math (KaTeX) | ✅ | `$…$` y `$$…$$`, con carga diferida |
 | Mermaid | ✅ | Bloques ```` ```mermaid ````, con carga diferida |
 | Sanitización del preview | ✅ | HTML crudo descartado, allowlist por construcción, URLs por esquema |
-| Outline / TOC | ✅ | Panel "Contenido" en vivo; click → scroll en el preview |
+| Outline / TOC | ✅ | Panel "Contenido" en vivo; click → mueve el cursor al encabezado |
 | Indicador de guardado | ✅ | Punto en el header + etiqueta en la barra de estado |
 | Auto-guardado | ✅ | Rebote de 1,5 s con timer cancelable |
 | File watching | ✅ | `notify`: recarga si el archivo abierto cambió afuera, refresca el árbol |
 | Atajos de teclado | ✅ | Tabla única: guardar, negrita, cursiva, código, tachado, enlace, foco, vistas, nuevo archivo |
 | Conteo de palabras/caracteres | ✅ | Barra de estado |
-| Barra de estado | ✅ | Selector de vista, conteo, indicador de guardado, botón guardar/limpiar |
+| Barra de estado | ✅ | Conteo, indicador de guardado, botón guardar/limpiar |
 | Modo claro/oscuro | ✅ | Toggle con doble clic en el logo |
 | Modals | ✅ | Shell único: Delete, Rename, Alert (con Escape) |
 | Resize panels | ✅ | Sidebar redimensionable arrastrando el divisor |
 | Mock mode (web) | ✅ | Datos demo cuando `!is_tauri()` |
 | Toolbar de plantillas | ❌ | **Eliminada** — ya no existe en el código (API Doc, Nota Rápida, Checklist, Generar Índice) |
-| Editor WYSIWYG inline | ❌ | Sin edición inline renderizada; el preview es un pane aparte |
+| Editor WYSIWYG inline | ✅ | El editor vivo muestra el formato mientras escribís, sobre el markdown plano |
 | Exportación | ❌ | No implementada |
 | Búsqueda | ❌ | No implementada |
 | Multi-tab | ❌ | Un solo archivo abierto |
@@ -409,17 +409,16 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 - [x] `Ctrl+Z` / `Ctrl+Y` — Undo/Redo
   - Viene de fábrica con `basicSetup` de CodeMirror 6, que incluye `history()` y su keymap. No verificado a mano.
 - [x] Hook global que intercepte y delegue a CM6 o Tauri
-  - `src/shortcuts.rs` recorre una tabla de `EditorCommand` y llama al mismo `run()` desde el keymap de CM6, desde los botones y desde la barra de estado. Antes solo `Ctrl+1`/`Ctrl+2` estaban cableados en el layout y el resto no hacía nada.
+  - `src/shortcuts.rs` recorre una tabla de `EditorCommand` y llama al mismo `run()` desde el keymap de CM6 y desde el listener global. Antes solo `Ctrl+1`/`Ctrl+2` estaban cableados en el layout y el resto no hacía nada.
 
 #### 1.5 — Modos de vista
 
-- [x] **Source Mode**: Editor CM6 a la izquierda, preview a la derecha (split pane actual)
+- [x] **Source Mode**: ver la fuente completa; es un toggle del modo en vivo (`Ctrl+/`), no un pane aparte
 - [x] **Live Preview Mode**: editor en vivo, único modo (formato aplicado
   mientras escribís, `Ctrl+/` muestra la fuente)
-- [x] **Reader Mode**: Solo preview, sin editor
-  - Se llama "Format" en la UI (`Ctrl+2`)
-- [x] Toggle entre modos con botón o atajo
-  - Selector segmentado en la barra de estado + `Ctrl+0`/`Ctrl+1`/`Ctrl+2`/`Ctrl+3`
+- [x] **Reader Mode**: se eliminó al borrar la preview de solo lectura; ya no hay modo lectura
+- [x] Toggle de fuente con atajo
+  - `Ctrl+/`. No hay selector de modos: sólo queda el modo vivo
 
 #### 1.6 — Auto-save
 
