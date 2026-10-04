@@ -57,18 +57,23 @@ Cinco entradas que el spec implica pero que ninguna tarea cubre con un test prop
 
 ---
 
-### Task 0: Spike del cursor con texto oculto (bloqueante)
+### Task 0: Spike del cursor con texto oculto (COMPLETO)
 
-Este spike decide si el enfoque entero es viable. Va **primero** y su resultado cambia el resto del plan.
+**Resultado: gana `Decoration.mark` + `font-size: 0`.** Informe con las mediciones:
+`.superpowers/sdd/2026-10-03-live-format-editor/spike/RESULT.md`.
 
-**Files:**
-- Create: `/tmp/opencode/spike-caret/` (fuera del repo; es desechable)
+Lo que decide:
 
-**Interfaces:**
-- Consumes: nada.
-- Produces: qué técnica de ocultado usar, que es la fila `Hide` del `decorationFor` del Task 3.
+| | técnica | resultado |
+|---|---|---|
+| usar | `Decoration.mark({ class: "cm-lp-hidden" })` + `.cm-lp-hidden { font-size: 0 }` | oculta, caret de a uno, copiar conserva el markdown |
+| descartar | `Decoration.replace({})` | el caret se traba y **copiar pierde el `**` de apertura** |
+| descartar | `Decoration.mark` + `display: none` | el caret queda atascado en el offset 2 para siempre |
 
-- [ ] **Step 1: Montar el spike**
+Los pasos que siguen están como referencia de cómo se midió, no como trabajo
+pendiente.
+
+- [ ]x **Step 1: Montar el spike**
 
 Con esbuild, empaquetar un `main.mjs` que cree un `EditorView` de CodeMirror 6 con `doc = "**hola**"` y cuatro extensiones de prueba:
 
@@ -81,23 +86,23 @@ Con esbuild, empaquetar un `main.mjs` que cree un `EditorView` de CodeMirror 6 c
 
 Salida `index.html` y `bundle.js` en `/tmp/opencode/spike-caret/`, servidos por el mismo servidor http que usan los otros scripts del repo.
 
-- [ ] **Step 2: Medir el comportamiento del caret**
+- [ ]x **Step 2: Medir el comportamiento del caret**
 
 Script de Playwright que, para cada técnica, ejecute y registre:
 
 | Caso | Qué se mide |
 |---|---|
 | Caret al final del documento, 8 flechas a la izquierda | Offset del caret tras cada una; debería bajar de a uno, no de a tres |
-| Escribir `x` con el caret al final | `view.state.doc.toString()` debe ser `**holaxx**`, no `**hola**x` ni `x**hola**` |
+| Escribir `x` con el caret al final | `view.state.doc.toString()` debe ser `**hola**x`: el caret está en el offset 8 y el carácter entra ahí |
 | Click entre las dos estrellas | Offset resultante |
 | Seleccionar todo | `textContent` de la línea |
 | Consola | Ninguna excepción en `pageerror` |
 
-- [ ] **Step 3: Decidir y reportar**
+- [ ]x **Step 3: Decidir y reportar**
 
 Anotar en `/tmp/opencode/spike-caret/RESULT.md`: técnica elegida y por qué. Gana la primera que no tire excepción y que pase los cuatro casos.
 
-- [ ] **Step 4: Eliminar el spike**
+- [ ]x **Step 4: Eliminar el spike**
 
 `rm -rf /tmp/opencode/spike-caret`. Nada de esto entra al repo.
 
@@ -314,6 +319,7 @@ git commit -m "feat: puente de tramos entre wasm y el editor"
 | Caso | Aserción |
 |---|---|
 | Escribir `**hola**` | `__codedocs_getContent()` es exactamente `**hola**` |
+| Seleccionar todo y copiar | el portapapeles conserva `**hola**`, no `hola**` |
 | Lo anterior | existe un `.cm-lp-strong` en el DOM |
 | Lo anterior | el `**` no se ve: la línea no tiene rects de cliente extras |
 | Cursor dentro de la línea | el texto visible vuelve a ser `**hola**` |
@@ -362,11 +368,24 @@ import { RangeSetBuilder } from "@codemirror/state";
 4. Crear el builder con el terminador primero: `builder.add(doc.length, Decoration.none)`. Es el idioma de `RangeSetBuilder` y evita que el primer tramo tenga que empezar en 0.
 5. Llenar el builder con los tramos en orden de `from`, saltando los de una línea revelada si `!showAll`.
 
-`decorationFor(tag)` mapea `SpanTag` a decoraciones. **La fila `Hide` es la técnica que ganó el spike del Task 0**, no una decisión de este task:
+`decorationFor(tag)` mapea `SpanTag` a decoraciones. La fila `Hide` usa lo que ganó el spike del Task 0, ya medido:
+
+```js
+// Decoration.mark y Decoration.replace son metodos estaticos que devuelven una
+// Decoration: NO llevan `new`. `DecorationSet` no se exporta como valor, asi que
+// el conjunto se arma con RangeSetBuilder, que es una clase.
+import { RangeSetBuilder } from "@codemirror/state";
+import { Decoration } from "@codemirror/view";
+
+const builder = new RangeSetBuilder();
+for (const { from, to, value } of ranges) builder.add(from, to, value);
+const set = builder.finish();
+```
+
 
 | Tag | Decoración |
 |---|---|
-| `Hide` (0) | la del spike: `replace` o `mark` con `display: none` |
+| `Hide` (0) | `Decoration.mark({ class: "cm-lp-hidden" })`, oculto con `font-size: 0` |
 | `Strong`, `Emphasis`, `Strikethrough`, `InlineCode` (1-4) | `Decoration.mark({ class: "cm-lp-strong" })`, etc. |
 | `LinkText` (5) | `Decoration.mark({ class: "cm-lp-link" })` |
 | `ImageAlt` (6) | widget — Task 4 |
@@ -375,6 +394,12 @@ import { RangeSetBuilder } from "@codemirror/state";
 | `ListMarker` (14) | ocultar, como `Hide` |
 | `Fence` (15) | ocultar, como `Hide` |
 | `TablePipe` (16), `TableDelimiter` (17) | ocultar, como `Hide` |
+
+**No usar `Decoration.replace` para ocultar.** El spike lo midió: el caret se
+traba y, peor, seleccionar todo y copiar devuelve `"hola**x"` en vez de
+`"**hola**x"` — el markdown de apertura desaparece y el usuario no se entera
+hasta que abre el archivo en otro programa. **No usar `display: none`**: el
+caret queda atascado en el offset 2 para siempre.
 | `MathInline` (18), `MathDisplay` (19), `MermaidBlock` (20) | widget — Task 4 |
 
 **Dos clases de decoración, dos reglas de rango.** `Decoration.line` cubre una línea
@@ -406,6 +431,10 @@ Las decoraciones se cachean en el `ViewPlugin` y sólo se recalculan si cambia e
 En `input.css`, bloque para `.cm-editor`:
 
 ```css
+/* Ocultado de sintaxis. font-size: 0 y NO display: none: con display: none el
+   caret queda atascado en el offset 2 y no puede atravesar el marcador. */
+.cm-lp-hidden { font-size: 0; }
+
 .cm-lp-strong { font-weight: 700; }
 .cm-lp-emphasis { font-style: italic; }
 .cm-lp-strikethrough { text-decoration: line-through; }
