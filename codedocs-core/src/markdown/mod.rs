@@ -22,6 +22,7 @@
 //!
 //! Document text always travels as `Event::Text`, which `push_html` escapes.
 
+mod live;
 mod math;
 mod sanitize;
 
@@ -29,6 +30,7 @@ use std::collections::HashMap;
 
 use pulldown_cmark::{html, CodeBlockKind, CowStr, Event, Options, Parser, Tag, TagEnd};
 
+pub use live::{live_spans, LiveSpans, SpanTag};
 pub use math::{split_math, MathPiece};
 pub use sanitize::is_safe_url;
 
@@ -47,7 +49,7 @@ pub struct Heading {
     pub anchor: String,
 }
 
-fn parser_options() -> Options {
+pub(crate) fn parser_options() -> Options {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
