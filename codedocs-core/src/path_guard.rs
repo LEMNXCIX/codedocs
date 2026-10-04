@@ -101,13 +101,20 @@ impl Workspace {
     /// symlink inside the project that points at `/etc` is rejected rather than
     /// silently followed.
     pub fn resolve(&self, raw: &str) -> Result<PathBuf, WorkspaceError> {
-        let candidate = Path::new(raw);
-        let canonical = candidate
-            .canonicalize()
-            .map_err(|source| WorkspaceError::Io {
-                path: candidate.to_path_buf(),
-                source,
-            })?;
+        self.canonical_inside(Path::new(raw))
+    }
+
+    /// Canonicalise `path` and confirm the *result* is inside the workspace.
+    ///
+    /// Split out of [`Workspace::resolve`] so the raw-path wrapper stays the
+    /// documented entry point while callers that already hold a `&Path` — the
+    /// write path below — do not have to stringify it and lose the original on
+    /// the error.
+    fn canonical_inside(&self, path: &Path) -> Result<PathBuf, WorkspaceError> {
+        let canonical = path.canonicalize().map_err(|source| WorkspaceError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
         if self.contains(&canonical) {
             Ok(canonical)
         } else {
@@ -116,6 +123,68 @@ impl Workspace {
                 root: self.root.clone(),
             })
         }
+    }
+
+    /// Resolve the target of a write, whether or not the file is on disk yet.
+    ///
+    /// This is the difference between "open this document" and "save this
+    /// document", and the two cannot share one check.
+    ///
+    /// [`Workspace::resolve_file`] canonicalises the whole path, and
+    /// canonicalising something that does not exist fails with `ENOENT`. A save
+    /// that goes through it can therefore only ever overwrite files that already
+    /// exist, which is why saving a document with no file — `Ctrl+S` with nothing
+    /// open, or the first save into a folder the app has never seen — used to
+    /// fail with "No such file or directory" on a path the user had just picked
+    /// in the native dialog.
+    ///
+    /// So this splits on whether there is a directory entry at `raw`:
+    ///
+    /// * **Something is there.** Hand it to [`Workspace::resolve_file`]
+    ///   unchanged. Canonicalising the *file* is what resolves a symlink before
+    ///   the containment test, so a link inside the project pointing at
+    ///   `/etc/passwd` is refused instead of followed.
+    /// * **Nothing is there.** There is no file to canonicalise, so
+    ///   containment moves to the *parent directory* — which does exist — and the
+    ///   last component has to survive [`validate_new_name`] before it is
+    ///   joined onto the canonical parent.
+    ///
+    /// The second case is also the reason the first one cannot be skipped
+    /// wholesale. Checking only the parent and joining the name would let a
+    /// missing final component *be* a symlink: the parent would pass containment
+    /// and the write would follow the link to its target. And
+    /// `symlink_metadata` rather than `exists` is what decides the branch,
+    /// because a dangling link exists as a directory entry but not as a file;
+    /// treating it as a free name would aim the write at whatever it points at.
+    ///
+    /// Returns the path to write to, which is the *joined* path rather than a
+    /// canonicalised one — the file does not exist, so there is nothing to
+    /// canonicalise. It is built from an already-canonical directory and a bare
+    /// name, so it cannot escape.
+    pub fn resolve_write_target(&self, raw: &str) -> Result<PathBuf, WorkspaceError> {
+        let candidate = Path::new(raw);
+        if candidate.symlink_metadata().is_ok() {
+            return self.resolve_file(raw);
+        }
+
+        let name = candidate
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| WorkspaceError::InvalidName {
+                name: raw.to_string(),
+                reason: "no es un nombre de archivo",
+            })?;
+        validate_new_name(name)?;
+
+        let parent = candidate.parent().ok_or_else(|| WorkspaceError::Outside {
+            path: candidate.to_path_buf(),
+            root: self.root.clone(),
+        })?;
+        // The containment check lands on the directory here, which is why the
+        // name had to be validated first: a validated bare name cannot introduce
+        // a `..` or a separator to walk back out of it.
+        let dir = self.resolve_dir(parent)?;
+        Ok(dir.join(name))
     }
 
     /// Resolve a path that is expected to be an existing regular file.
@@ -138,7 +207,12 @@ impl Workspace {
 
     /// Resolve a folder inside the workspace that new entries may be created in.
     pub fn resolve_folder(&self, raw: &str) -> Result<PathBuf, WorkspaceError> {
-        let path = self.resolve(raw)?;
+        self.resolve_dir(Path::new(raw))
+    }
+
+    /// [`Workspace::resolve_folder`] for a caller that already has a `&Path`.
+    fn resolve_dir(&self, raw: &Path) -> Result<PathBuf, WorkspaceError> {
+        let path = self.canonical_inside(raw)?;
         if !path.is_dir() {
             return Err(WorkspaceError::InvalidRoot {
                 path,
@@ -403,5 +477,181 @@ mod tests {
             .resolve_new_file(dir.to_str().unwrap(), "/etc/evil.md")
             .is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Write targets: the file may not be on disk yet --------------------
+
+    #[test]
+    fn write_target_resolves_a_new_file_inside_the_workspace() {
+        let dir = temp_dir("writetarget");
+        write(&dir, "sub/keep.md", "# hi");
+        let ws = Workspace::open(&dir).unwrap();
+        // The regression: canonicalising this path failed with ENOENT, so a save
+        // of a document with no file could only ever fail.
+        let fresh = dir.join("sub/fresh.md");
+        assert!(!fresh.exists(), "the fixture must not create the file");
+        let target = ws
+            .resolve_write_target(fresh.to_str().unwrap())
+            .expect("a new file inside the workspace should resolve");
+        assert_eq!(target, fresh);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_target_resolves_a_new_file_at_the_workspace_root() {
+        let dir = temp_dir("writeroot");
+        let ws = Workspace::open(&dir).unwrap();
+        let target = ws
+            .resolve_write_target(dir.join("notas.md").to_str().unwrap())
+            .expect("a new file at the root should resolve");
+        assert_eq!(target, dir.join("notas.md"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_target_resolves_the_same_new_file_twice() {
+        let dir = temp_dir("writetwice");
+        let ws = Workspace::open(&dir).unwrap();
+        let raw = dir.join("notas.md").to_str().unwrap().to_string();
+
+        // First resolution: the file does not exist, so the parent carries the
+        // containment check.
+        let first = ws.resolve_write_target(&raw).unwrap();
+        std::fs::write(&first, "# hola").unwrap();
+
+        // Second resolution: now it exists, so it goes through `resolve_file`.
+        // Both paths have to keep working or the second save of the same
+        // document — the autosave, every time — would fail.
+        let second = ws.resolve_write_target(&raw).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(std::fs::read_to_string(&second).unwrap(), "# hola");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_target_rejects_a_new_file_outside_the_workspace() {
+        let outside = temp_dir("writeoutside");
+        let dir = temp_dir("writeinside");
+        let ws = Workspace::open(&dir).unwrap();
+        let escape = outside.join("plantado.md");
+        assert!(
+            ws.resolve_write_target(escape.to_str().unwrap()).is_err(),
+            "a new file outside the workspace must be refused"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn write_target_rejects_dotdot_in_the_name() {
+        let dir = temp_dir("writedotdot");
+        // A real intermediate directory, so a rejection cannot come from a
+        // parent that does not exist: `sub/../escaped.md` has to be refused for a
+        // reason that has nothing to do with ENOENT.
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        let ws = Workspace::open(&dir).unwrap();
+
+        // A `..` that reaches the *parent* is resolved before the containment
+        // check, so it lands inside and is not itself a rejection — what matters
+        // is that it is gone from the path that gets returned.
+        let landed = ws
+            .resolve_write_target(dir.join("sub/../notas.md").to_str().unwrap())
+            .expect("a mid-path '..' is canonicalised, not carried through");
+        assert_eq!(
+            landed,
+            dir.join("notas.md"),
+            "the '..' survived into the target"
+        );
+
+        // A `..` in the last position has no file name at all, and one that
+        // walks out of the parent is caught by the containment check.
+        for bad in [
+            "..",
+            ".",
+            "sub/..",
+            "sub/.",
+            "../escaped.md",
+            "/etc/evil.md",
+        ] {
+            let raw = dir.join(bad);
+            assert!(
+                ws.resolve_write_target(raw.to_str().unwrap()).is_err(),
+                "should have rejected: {bad:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_target_rejects_a_name_that_is_not_markdown() {
+        let dir = temp_dir("writetxt");
+        let ws = Workspace::open(&dir).unwrap();
+        // Inside the workspace, with a parent that exists, so containment alone
+        // would let it through. The app only lists `.md`, so a save that created
+        // `notas.txt` would produce a document the sidebar can never show again.
+        let err = ws
+            .resolve_write_target(dir.join("notas.txt").to_str().unwrap())
+            .expect_err("a name that is not markdown should be refused");
+        assert!(
+            matches!(err, WorkspaceError::InvalidName { .. }),
+            "unexpected error: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_target_rejects_a_new_file_under_a_symlinked_parent() {
+        // The hole the two-case split exists to close: canonicalising only the
+        // parent resolves this to a directory *outside* the workspace, so the
+        // check has to follow the link and fail there — a bare name validation
+        // alone would pass it and the write would land outside.
+        let outside = temp_dir("parenttarget");
+        let dir = temp_dir("parentroot");
+        let ws = Workspace::open(&dir).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("escape")).unwrap();
+        let escape = dir.join("escape/plantado.md");
+        assert!(
+            ws.resolve_write_target(escape.to_str().unwrap()).is_err(),
+            "a parent that symlinks out of the workspace must be refused"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_target_still_rejects_an_existing_symlink_pointing_outside() {
+        // The behaviour the new branch must not cost us: `save_file` now calls
+        // `resolve_write_target`, so the existing-file case is the one that keeps
+        // a link pointing at `/etc/passwd` from being written through.
+        let outside = temp_dir("linktarget");
+        let secret = write(&outside, "secret.md", "top secret");
+        let dir = temp_dir("linkroot");
+        std::os::unix::fs::symlink(&secret, dir.join("link.md")).unwrap();
+        let ws = Workspace::open(&dir).unwrap();
+        assert!(matches!(
+            ws.resolve_write_target(dir.join("link.md").to_str().unwrap()),
+            Err(WorkspaceError::Outside { .. })
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_target_refuses_a_dangling_symlink() {
+        // It exists as a directory entry but not as a file. Resolving it as a
+        // "free name" would aim the write at whatever it points at, so it has to
+        // take the existing-entry branch and fail there.
+        let outside = temp_dir("danglingtarget");
+        let dir = temp_dir("danglingroot");
+        let ws = Workspace::open(&dir).unwrap();
+        std::os::unix::fs::symlink(outside.join("nunca.md"), dir.join("link.md")).unwrap();
+        assert!(ws
+            .resolve_write_target(dir.join("link.md").to_str().unwrap())
+            .is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 }

@@ -73,6 +73,9 @@ pub fn Sidebar(
                                title=move || state.path.get().unwrap_or_default()>
                                 {move || state.path.get().unwrap_or_else(|| "Sin carpeta".into())}
                             </p>
+                            <Show when=move || state.tree_loaded.get() && state.files.get().is_empty()>
+                                <EmptyTree />
+                            </Show>
                             <FileTree items=state.files state on_delete on_rename />
                         </div>
                     }
@@ -196,6 +199,9 @@ fn OpenFolderButton(state: EditorState) -> impl IntoView {
             match tauri_bridge::open_project_folder().await {
                 Ok(path) => {
                     state.path.set(Some(path));
+                    // Same reason `adopt_workspace` does it: whatever the tree
+                    // shows right now belongs to the folder just left.
+                    state.tree_loaded.set(false);
                     actions::refresh_files(state);
                     watch_workspace(state);
                 }
@@ -222,10 +228,46 @@ fn OpenFolderButton(state: EditorState) -> impl IntoView {
     }
 }
 
+/// What the sidebar shows when a folder is open and holds no markdown.
+///
+/// An empty folder used to arrive as a backend *error* — "No se encontraron
+/// archivos Markdown…" — which is not what happened: the folder was fine, it just
+/// had nothing in it yet. `list_markdown_files` returns an empty tree for that now
+/// (see `tree_outcome` in the backend), and this is where the state becomes
+/// visible instead of an error toast that appeared a second before the save it
+/// was blocking.
+///
+/// Only rendered once the folder's tree has actually come back *and* came back
+/// empty. The emptiness test sits in the parent, whose reactive scope re-reads
+/// the tree on every refresh; a `files` read in this component's own scope would
+/// be initialised once and never update, so the note would outlive the file that
+/// made it disappear. The wrapper is a `<div>` because it holds two `<p>`s, which
+/// a `<p>` cannot do; the browser checks read the folder path above as the
+/// sidebar's first paragraph, and this must not take that slot.
+#[component]
+fn EmptyTree() -> impl IntoView {
+    view! {
+        <div
+            class="mt-4 px-3 py-4 rounded-md border border-dashed \
+                   border-base-200 dark:border-base-800 text-center"
+        >
+            <p class="text-xs text-base-500 dark:text-base-400 leading-relaxed">
+                "Esta carpeta no tiene archivos Markdown todavía."
+            </p>
+            <Show when=move || is_tauri()>
+                <p class="mt-2 text-[11px] text-base-400 dark:text-base-600 leading-relaxed">
+                    "Podés crear el primero con «Nuevo Archivo»."
+                </p>
+            </Show>
+        </div>
+    }
+}
+
 /// Populate the tree with demo data in the browser build.
 fn load_demo_folder(state: EditorState) {
     const DEMO_ROOT: &str = "C:\\Demo\\Documents";
     state.path.set(Some(DEMO_ROOT.to_string()));
+    state.tree_loaded.set(true);
     state.files.set(vec![
         FileEntry::file("Bienvenido.md", format!("{DEMO_ROOT}\\Bienvenido.md")),
         FileEntry::file("Guía_Rápida.md", format!("{DEMO_ROOT}\\Guía_Rápida.md")),

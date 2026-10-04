@@ -49,7 +49,13 @@ pub fn refresh_files(state: EditorState) {
 /// wait for this instead of racing it.
 async fn load_tree(state: EditorState, folder: &str) {
     match tauri_bridge::list_markdown_files(folder).await {
-        Ok(tree) => state.files.set(tree.entries),
+        Ok(tree) => {
+            state.files.set(tree.entries);
+            // Now, and only now, does an empty tree mean "this folder has no
+            // markdown". Before the response arrives it means "we do not know
+            // yet", and the sidebar has to be able to tell those apart.
+            state.tree_loaded.set(true);
+        }
         Err(err) => {
             leptos::logging::error!("No se pudo listar archivos: {err}");
             state.notify(err);
@@ -94,6 +100,9 @@ pub async fn ensure_workspace(state: EditorState) -> Option<String> {
 /// "no hay ninguna carpeta abierta".
 async fn adopt_workspace(state: EditorState, folder: String) {
     state.path.set(Some(folder.clone()));
+    // The tree in the sidebar belongs to the *previous* folder from here on, so
+    // it is not an answer about this one until `load_tree` says so.
+    state.tree_loaded.set(false);
     load_tree(state, &folder).await;
 }
 

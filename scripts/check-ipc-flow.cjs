@@ -44,10 +44,14 @@ const STUB = `
   var calls = [];
   window.__ipcLog = calls;
   window.__fixtureRoot = __FIXTURE_ROOT__;
+  window.__emptyRoot = __EMPTY_ROOT__;
   window.__saveRoute = __SAVE_ROUTE__;
   window.__saveCancels = false;
   // Makes the next save_file reject, so the failure path can be driven.
   window.__saveFails = false;
+  // Makes the next list_markdown_files reject, so the "opening a folder failed"
+  // path can be driven without breaking a real folder on disk.
+  window.__listFails = false;
   var nextId = 1;
   var handlers = new Map();
 
@@ -56,7 +60,8 @@ const STUB = `
       invoke: function (cmd, args) {
         calls.push({ cmd: cmd, args: args });
         switch (cmd) {
-          case "open_project_folder": return Promise.resolve(window.__fixtureRoot);
+          case "open_project_folder":
+            return Promise.resolve(window.__openRoot || window.__fixtureRoot);
           case "save_file_as":
             // The one place the stub decides the user cancelled, so the cancel
             // path can be driven without a native dialog.
@@ -64,6 +69,10 @@ const STUB = `
               ? Promise.reject("Usuario cancelo la accion")
               : Promise.resolve(window.__saveRoute);
           case "list_markdown_files":
+            if (window.__listFails) {
+              window.__listFails = false;
+              return Promise.reject("No se pudo leer la carpeta: permiso denegado");
+            }
             // The command returns a FileTree (entries + truncated), not a bare
             // array. Returning the array shape left the sidebar empty and this
             // check reporting "file tree did not render" for a failure that was
@@ -130,6 +139,11 @@ fs.writeFileSync(path.join(fixture, "Bienvenido.md"), "# Hola\n\nContenido de pr
 fs.mkdirSync(path.join(fixture, "Guardado"));
 const saveRoute = path.join(fixture, "Guardado", "prueba.md");
 const saveParent = path.dirname(saveRoute);
+// A folder with no markdown at all, for the empty-state check. A *sibling* of
+// the fixture, not a subdirectory of it: the sidebar lists nested folders as
+// rows, and this one has to be invisible to the rest of the flow.
+const emptyFolder = fs.mkdtempSync(path.join(os.tmpdir(), "codedocs-vacia-"));
+fs.writeFileSync(path.join(emptyFolder, "no-es-markdown.txt"), "nada que ver");
 
 const conf = JSON.parse(
   fs.readFileSync(path.join(REPO, "src-tauri", "tauri.conf.json"), "utf8"),
@@ -191,10 +205,9 @@ const server = http.createServer((req, res) => {
   if (url === "/tauri-stub.js") {
     // The fixture root and the save route are baked in at serve time so no
     // inline script is needed.
-    const body = STUB.replace("__FIXTURE_ROOT__", JSON.stringify(fixture)).replace(
-      "__SAVE_ROUTE__",
-      JSON.stringify(saveRoute),
-    );
+    const body = STUB.replace("__FIXTURE_ROOT__", JSON.stringify(fixture))
+      .replace("__EMPTY_ROOT__", JSON.stringify(emptyFolder))
+      .replace("__SAVE_ROUTE__", JSON.stringify(saveRoute));
     res.writeHead(200, { "Content-Type": "text/javascript", "Content-Security-Policy": csp });
     return res.end(body);
   }
@@ -561,6 +574,113 @@ const server = http.createServer((req, res) => {
   const openIpc = await page.evaluate(() => window.__ipcLog);
   const openTree = await treeRows();
 
+  // --- A folder with no markdown is a state, not a failure -----------------
+  //
+  // Both halves of this one need saying out loud, because the check can only see
+  // one of them. The *backend* half (an empty walk comes back as `Ok`, not as
+  // "No se encontraron archivos Markdown") is asserted on the host by
+  // `commands::tests::an_empty_folder_is_reported_as_an_empty_tree` — a stubbed
+  // backend cannot prove anything about the real one. What this proves is the
+  // *frontend* half: given an empty tree, no toast, and a note instead of an
+  // error-looking screen.
+  const empty = await browser.newPage();
+  empty.on("pageerror", (e) => errors.push("empty pageerror: " + e.message));
+  await empty.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
+  await empty.waitForTimeout(1500);
+  const emptyToastBefore = await empty.evaluate(() => {
+    const el = document.querySelector(".fixed.bottom-12");
+    return el ? el.textContent.trim() : null;
+  });
+  await empty.evaluate(() => {
+    window.__ipcLog.length = 0;
+    window.__openRoot = window.__emptyRoot;
+  });
+  await empty.getByRole("button", { name: /Abrir carpeta/i }).click();
+  await empty.waitForTimeout(2500);
+  const emptyIpc = await empty.evaluate(() => window.__ipcLog);
+  const emptyToast = await empty.evaluate(() => {
+    const el = document.querySelector(".fixed.bottom-12");
+    return el ? el.textContent.trim() : null;
+  });
+  const emptyRows = await empty.evaluate(() =>
+    [...document.querySelectorAll("aside li")].map((li) => li.textContent.trim()),
+  );
+  const emptyAside = await empty.evaluate(() => {
+    const aside = document.querySelector("aside");
+    return aside ? aside.textContent : "";
+  });
+  const emptyLabel = await empty.evaluate(() => {
+    const p = document.querySelector("aside p");
+    return p ? p.textContent.trim() : null;
+  });
+
+  check(
+    "una carpeta vacía no avisa ningún error",
+    emptyToast === null && !/No se pudo listar archivos/.test(errors.join(" ")),
+    JSON.stringify([emptyToastBefore, emptyToast]),
+  );
+  check("una carpeta vacía no muestra filas", emptyRows.length === 0, JSON.stringify(emptyRows));
+  check(
+    "una carpeta vacía se explica en vez de fallar",
+    /no tiene archivos Markdown todavía/.test(emptyAside),
+    JSON.stringify(emptyAside.slice(-160)),
+  );
+  // The folder label is the first `<p>` in the sidebar and the empty-state note
+  // lives after it: if the note ever took that slot, this would read the note.
+  check("una carpeta vacía muestra su ruta en la etiqueta", emptyLabel === emptyFolder, JSON.stringify(emptyLabel));
+  check(
+    "una carpeta vacía se abre igual",
+    emptyIpc.some((c) => c.cmd === "open_project_folder") &&
+      emptyIpc.some((c) => c.cmd === "list_markdown_files"),
+    JSON.stringify(emptyIpc.map((c) => c.cmd)),
+  );
+
+  // ...and the note goes away as soon as the folder has something in it, so it
+  // cannot become a permanent lie.
+  await empty.evaluate(() => {
+    window.__openRoot = null;
+  });
+  await empty.getByRole("button", { name: /Abrir carpeta/i }).click();
+  await empty.waitForTimeout(2500);
+  const afterFillRows = await empty.evaluate(() =>
+    [...document.querySelectorAll("aside li")].map((li) => li.textContent.trim()),
+  );
+  const afterFillAside = await empty.evaluate(() => {
+    const aside = document.querySelector("aside");
+    return aside ? aside.textContent : "";
+  });
+  check(
+    "la nota de carpeta vacía desaparece cuando hay archivos",
+    afterFillRows.some((row) => row.includes("Bienvenido")) &&
+      !/no tiene archivos Markdown todavía/.test(afterFillAside),
+    JSON.stringify(afterFillRows),
+  );
+  await empty.close();
+
+  // --- A listing that genuinely fails still is an error --------------------
+  //
+  // The other side of the coin: "empty is not a failure" must not turn into
+  // "nothing is a failure".
+  const broken = await browser.newPage();
+  broken.on("pageerror", (e) => errors.push("broken pageerror: " + e.message));
+  await broken.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
+  await broken.waitForTimeout(1500);
+  await broken.evaluate(() => {
+    window.__listFails = true;
+  });
+  await broken.getByRole("button", { name: /Abrir carpeta/i }).click();
+  await broken.waitForTimeout(2500);
+  const brokenToast = await broken.evaluate(() => {
+    const el = document.querySelector(".fixed.bottom-12");
+    return el ? el.textContent.trim() : null;
+  });
+  check(
+    "una carpeta que no se puede leer sigue avisando el error",
+    !!brokenToast && /permiso denegado/.test(brokenToast),
+    JSON.stringify(brokenToast),
+  );
+  await broken.close();
+
   await browser.close();
   server.close();
 
@@ -602,6 +722,7 @@ const server = http.createServer((req, res) => {
   }
 
   fs.rmSync(fixture, { recursive: true, force: true });
+  fs.rmSync(emptyFolder, { recursive: true, force: true });
 
   if (problems.length > 0) {
     console.error(`FAIL: ${problems.length} problem(s):`);
