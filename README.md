@@ -187,6 +187,13 @@ punto de paso:
 
 Véase [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Limitaciones
+
+- Las imágenes Markdown no cargan por el CSP (`img-src 'self' data: blob:`):
+  en el editor se ve el alt con la ruta en el tooltip.
+- La vista en vivo se verificó en Chromium, mientras la app corre sobre
+  WebKitGTK en Linux.
+
 ## Licencia
 
 [MIT](LICENSE) © 2026 CodeDocs contributors.

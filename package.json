@@ -25,7 +25,9 @@
     "check:tauri": "node scripts/check-tauri-contract.mjs",
     "check:csp": "node scripts/check-csp-boot.cjs",
     "check:preview": "node scripts/check-preview-render.cjs",
-    "verify:browser": "npm run build && npm run check:glue && npm run check:csp && npm run check:ipc && npm run check:preview",
+    "check:live": "node scripts/check-live-editor.cjs",
+    "check:big": "node scripts/check-large-folder.cjs",
+    "verify:browser": "npm run build && npm run check:glue && npm run check:csp && npm run check:ipc && npm run check:preview && npm run check:live && npm run check:big",
     "check:glue": "node scripts/check-tauri-glue.mjs",
     "check:ipc": "node scripts/check-ipc-flow.cjs"
   },

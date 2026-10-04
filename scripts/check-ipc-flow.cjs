@@ -48,7 +48,21 @@ const STUB = `
         switch (cmd) {
           case "open_project_folder": return Promise.resolve(window.__fixtureRoot);
           case "list_markdown_files":
-            return Promise.resolve([{ name: "Bienvenido.md", path: window.__fixtureRoot + "/Bienvenido.md", is_dir: false, children: [] }]);
+            // The command returns a FileTree (entries + truncated), not a bare
+            // array. Returning the array shape left the sidebar empty and this
+            // check reporting "file tree did not render" for a failure that was
+            // in the stub, not in the app.
+            return Promise.resolve({
+              entries: [
+                {
+                  name: "Bienvenido.md",
+                  path: window.__fixtureRoot + "/Bienvenido.md",
+                  is_dir: false,
+                  children: [],
+                },
+              ],
+              truncated: null,
+            });
           case "read_file": return Promise.resolve("# Hola\\n\\nContenido de prueba.\\n");
           default: return Promise.resolve(null);
         }

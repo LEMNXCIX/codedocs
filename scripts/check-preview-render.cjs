@@ -1,23 +1,30 @@
 /**
- * Feeds the real `codedocs_core` renderer output to a real browser under the
- * shipped CSP, and asserts both that hostile markdown is neutralised and that
- * KaTeX and Mermaid still render.
+ * Feeds hostile markdown plus math and a diagram to the real live-format
+ * editor under the shipped CSP, and asserts both that hostile markdown is
+ * neutralised and that KaTeX and Mermaid still render **inside `.cm-editor`**.
  *
- * Why a browser and not just the Rust unit tests: the unit tests assert that the
- * sanitiser produces a particular string. This asserts that a real HTML parser
- * and a real CSP engine agree, and — the part the unit tests cannot reach — that
- * the lazy-loading of KaTeX/Mermaid still works once a Content-Security-Policy
- * is in force. Lazy-loading by script injection is exactly the kind of feature a
- * CSP breaks silently.
+ * Why a browser and not just the Rust unit tests: the unit tests assert that
+ * the sanitiser produces a particular string. This asserts that a real HTML
+ * parser and a real CSP engine agree, and — the part the unit tests cannot
+ * reach — that the lazy-loading of KaTeX/Mermaid still works once a
+ * Content-Security-Policy is in force. Lazy-loading by script injection is
+ * exactly the kind of feature a CSP breaks silently.
  *
- * The HTML under test comes from `codedocs-core/examples/render.rs`, so it is
- * the actual production renderer rather than a fixture written here.
+ * There is no read-only preview anymore: the markdown is the document and
+ * CodeMirror holds the source, so the `.katex` nodes and the Mermaid `svg`
+ * are asserted inside `.cm-editor`, next to the `.cm-lp-*` widgets that own
+ * them. Every render assertion also requires its widget class: without the
+ * widget the selector is gone and the case fails, so a broken or missing
+ * widget cannot pass silently.
+ *
+ * Structure mirrors `scripts/check-live-editor.cjs`: serve `dist/` over http
+ * with the shipping CSP (inline-script hashes appended, as Tauri does) and
+ * drive the real WASM app with Playwright.
  *
  * Requires: `npm run build`, and Playwright's chromium.
  */
 const { chromium } = require("playwright");
 const crypto = require("node:crypto");
-const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -26,7 +33,7 @@ const REPO = path.resolve(__dirname, "..");
 const ROOT = path.join(REPO, "dist");
 const PORT = Number(process.env.PREVIEW_CHECK_PORT || 8094);
 
-const HOSTILE_MD = `# Report
+const DOC = `# Report
 
 <script>window.__pwned = true;</script>
 <img src=x onerror="window.__pwned = true">
@@ -44,25 +51,13 @@ graph TD;
   A-->B;
 \`\`\`
 
-| col | col |
-|---|---|
-| 1 | 2 |
-
-- [x] done
-> quoted
+cola final
 `;
 
 if (!fs.existsSync(path.join(ROOT, "index.html"))) {
   console.error(`FAIL: ${ROOT}/index.html not found. Run \`npm run build\` first.`);
   process.exit(1);
 }
-
-// The real renderer, not a hand-written fixture.
-const rendered = execFileSync(
-  "cargo",
-  ["run", "--quiet", "-p", "codedocs-core", "--example", "render"],
-  { cwd: REPO, input: HOSTILE_MD, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
-);
 
 const conf = JSON.parse(
   fs.readFileSync(path.join(REPO, "src-tauri", "tauri.conf.json"), "utf8"),
@@ -89,7 +84,11 @@ const TYPES = {
 
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split("?")[0]);
-  const file = path.join(ROOT, url === "/" ? "index.html" : url);
+  if (url === "/") {
+    res.writeHead(200, { "Content-Type": "text/html", "Content-Security-Policy": csp });
+    return res.end(indexHtml);
+  }
+  const file = path.join(ROOT, url);
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404).end("not found");
     return;
@@ -106,51 +105,90 @@ const server = http.createServer((req, res) => {
 
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  const problems = [];
   const errors = [];
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1200);
+  // Always print `extra`, pass or fail (same convention as check-live-editor).
+  const check = (name, cond, extra) => {
+    if (cond) console.log(`  ok: ${name}${extra ? ` — ${extra}` : ""}`);
+    else problems.push(extra ? `${name} — ${extra}` : name);
+  };
 
-  const result = await page.evaluate(async (html) => {
-    window.__pwned = false;
-    const host = document.createElement("div");
-    host.className = "prose";
-    host.innerHTML = html;
-    document.body.appendChild(host);
-    await window.__codedocs_render_enhancements_async();
-    await new Promise((r) => setTimeout(r, 5000));
+  await page.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(2000);
+
+  // Same boot as check-live-editor: the CodeMirror instance mounts here.
+  await page.keyboard.press("Control+1");
+  try {
+    await page.waitForSelector(".cm-editor .cm-content", { timeout: 8000 });
+  } catch {
+    console.error("FAIL: el editor no montó tras Ctrl+1");
+    await browser.close();
+    server.close();
+    process.exit(1);
+  }
+
+  await page.evaluate((t) => window.__codedocs_setContent(t), DOC);
+  // Caret to the last line, off the math and diagram lines: those reveal
+  // their source while the cursor is on them, so hiding/rendering is only
+  // observable from elsewhere.
+  await page.click(".cm-editor .cm-content");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(800);
+
+  const libs = await page.evaluate(() => ({
+    katexLoaded: typeof window.katex === "object",
+    mermaidLoaded: typeof window.mermaid === "object",
+  }));
+
+  let katexInline = 0;
+  try {
+    await page.waitForSelector(".cm-editor .katex", { timeout: 8000 });
+    katexInline = await page.evaluate(() => document.querySelectorAll(".cm-editor .katex").length);
+  } catch {
+    katexInline = 0;
+  }
+  const mathInlineWidget = await page.evaluate(
+    () => !!document.querySelector(".cm-editor .cm-lp-math-inline"),
+  );
+  const mathBlockWidget = await page.evaluate(
+    () => !!document.querySelector(".cm-editor .cm-lp-math-block"),
+  );
+
+  let mermaidSvg = 0;
+  try {
+    await page.waitForSelector(".cm-editor .cm-lp-mermaid svg", { timeout: 15000 });
+    mermaidSvg = await page.evaluate(
+      () => document.querySelectorAll(".cm-editor .cm-lp-mermaid svg").length,
+    );
+  } catch {
+    mermaidSvg = 0;
+  }
+  const mermaidWidget = await page.evaluate(
+    () => !!document.querySelector(".cm-editor .cm-lp-mermaid"),
+  );
+
+  const safety = await page.evaluate(() => {
+    const editor = document.querySelector(".cm-editor");
+    const els = editor ? [...editor.querySelectorAll("*")] : [];
     return {
       pwned: window.__pwned === true,
-      katexLoaded: typeof window.katex === "object",
-      mermaidLoaded: typeof window.mermaid === "object",
-    };
-  }, rendered);
-
-  const dom = await page.evaluate(() => {
-    const hosts = document.querySelectorAll(".prose");
-    const host = hosts[hosts.length - 1];
-    if (!host) return { found: false };
-    return {
-      found: true,
-      scriptTags: host.querySelectorAll("script").length,
-      iframes: host.querySelectorAll("iframe").length,
-      imgs: host.querySelectorAll("img").length,
-      inlineHandlers: [...host.querySelectorAll("*")].filter((el) =>
+      scriptTags: editor ? editor.querySelectorAll("script").length : -1,
+      iframes: editor ? editor.querySelectorAll("iframe").length : -1,
+      inlineHandlers: els.filter((el) =>
         [...el.attributes].some((a) => a.name.startsWith("on")),
       ).length,
-      jsHrefs: [...host.querySelectorAll("a")].filter((a) =>
-        (a.getAttribute("href") || "").toLowerCase().includes("javascript:"),
+      jsHrefs: els.filter(
+        (el) =>
+          el.tagName === "A" &&
+          (el.getAttribute("href") || "").toLowerCase().includes("javascript:"),
       ).length,
-      headingId: host.querySelector("h1")?.getAttribute("id"),
-      katexRendered: host.querySelectorAll(".katex").length,
-      mermaidSvg: host.querySelectorAll(".mermaid-block svg").length,
-      tableRows: host.querySelectorAll("table tbody tr").length,
-      checkboxChecked: !!host.querySelector('input[type="checkbox"][checked]'),
-      blockquote: !!host.querySelector("blockquote"),
+      hostileTextKept: (editor ? editor.textContent : "").includes("md link"),
     };
   });
 
@@ -159,36 +197,49 @@ const server = http.createServer((req, res) => {
 
   const violations = errors.filter((e) => /Content Security Policy|Refused to/i.test(e));
 
-  console.log("=== SANITISER (HTML real de codedocs_core, en un navegador real) ===");
-  console.log("attacker script executed:", result.pwned);
-  console.log(JSON.stringify(dom, null, 2));
+  console.log("=== SANITISER (markdown hostil dentro del editor en vivo) ===");
+  console.log("attacker script executed:", safety.pwned);
+  console.log(JSON.stringify(safety, null, 2));
   console.log("");
-  console.log("=== ENHANCEMENTS BAJO CSP ===");
-  console.log("katex loaded:", result.katexLoaded, "| mermaid loaded:", result.mermaidLoaded);
+  console.log("=== ENHANCEMENTS BAJO CSP (dentro de .cm-editor) ===");
+  console.log("katex loaded:", libs.katexLoaded, "| mermaid loaded:", libs.mermaidLoaded);
   console.log("CSP violations:", violations.length);
   for (const v of violations) console.log("  " + v.slice(0, 200));
-
-  const safe =
-    !result.pwned &&
-    dom.scriptTags === 0 &&
-    dom.iframes === 0 &&
-    dom.inlineHandlers === 0 &&
-    dom.jsHrefs === 0;
-  // Mermaid legitimately emits an <svg>; a document that also contains raw
-  // <svg> in the payload would be indistinguishable, so the injection attempts
-  // are asserted separately above.
-  const enhanced = dom.katexRendered > 0 && dom.mermaidSvg > 0;
-  const features =
-    dom.tableRows > 0 && dom.checkboxChecked && dom.blockquote && dom.headingId === "report";
-
   console.log("");
-  console.log("sanitiser holds:", safe);
-  console.log("katex + mermaid render under CSP:", enhanced);
-  console.log("GFM features + heading ids:", features);
 
-  const ok = safe && enhanced && features && violations.length === 0 && !result.pwned;
-  console.log(ok ? "\nPASS" : "\nFAIL");
-  process.exit(ok ? 0 : 1);
+  check("el script del atacante no se ejecutó", !safety.pwned);
+  check(
+    "sin script/iframe/handlers/javascript: en el editor",
+    safety.scriptTags === 0 &&
+      safety.iframes === 0 &&
+      safety.inlineHandlers === 0 &&
+      safety.jsHrefs === 0,
+    `script=${safety.scriptTags} iframe=${safety.iframes} on*=${safety.inlineHandlers} js:=${safety.jsHrefs}`,
+  );
+  check("el texto del enlace hostil se conserva", safety.hostileTextKept);
+  check(
+    "math inline renderiza KaTeX en su widget",
+    katexInline >= 1 && mathInlineWidget,
+    `katex=${katexInline} widget=${mathInlineWidget}`,
+  );
+  check(
+    "math display renderiza KaTeX en su widget",
+    mathBlockWidget,
+    `widget=${mathBlockWidget}`,
+  );
+  check(
+    "mermaid renderiza un svg en su widget",
+    mermaidSvg >= 1 && mermaidWidget,
+    `svg=${mermaidSvg} widget=${mermaidWidget}`,
+  );
+  check("sin violaciones de CSP", violations.length === 0, `violations=${violations.length}`);
+
+  if (problems.length > 0) {
+    console.error(`\nFAIL: ${problems.length} problem(s):`);
+    for (const p of problems) console.error("  - " + p);
+    process.exit(1);
+  }
+  console.log("\nPASS: hostile markdown neutralised, KaTeX + Mermaid render in the live editor.");
 })().catch((err) => {
   console.error("FAIL: " + err.message);
   process.exit(1);

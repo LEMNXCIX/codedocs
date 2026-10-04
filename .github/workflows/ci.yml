@@ -60,6 +60,54 @@ jobs:
       - name: Check the JS bridge contract
         run: npm run check:bridge
 
+  browser:
+    name: Browser checks (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      # `npm run build` is `trunk build --release`, which no other job runs.
+      # A prebuilt binary avoids the several minutes `cargo install trunk`
+      # costs on every run. Pinned to the version used locally (trunk 0.21.14;
+      # the asset URL below was verified to resolve).
+      - name: Install trunk
+        run: |
+          curl -sSL -o /tmp/trunk.tgz https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz
+          mkdir -p /tmp/trunk-bin && tar -xzf /tmp/trunk.tgz -C /tmp/trunk-bin
+          sudo install -m 0755 "$(find /tmp/trunk-bin -name trunk -type f | head -1)" /usr/local/bin/trunk
+          trunk --version
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Chromium plus its system dependencies; the check scripts drive
+      # headless chromium against dist/ served under the shipped CSP.
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      # Order matters: verify:browser builds dist/ with trunk first, because
+      # every browser check serves dist/.
+      - name: Browser checks (glue, CSP, IPC, preview, live editor, large folder)
+        run: npm run verify:browser
+
   tauri:
     name: Tauri backend (Linux)
     runs-on: ubuntu-latest
