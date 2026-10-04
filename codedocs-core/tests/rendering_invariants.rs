@@ -99,8 +99,10 @@ fn images_inside_images_stay_balanced() {
 
 #[test]
 fn outline_anchors_are_ids_that_exist() {
-    // The outline scrolls by anchor; a recomputed slug that does not match the
-    // renderer's id makes the click silently do nothing.
+    // The outline jumps the cursor by offset now, but the anchors still have
+    // to match the ids the renderer emits: anything that looks a heading up
+    // by id depends on it, and a recomputed slug that does not match makes
+    // the lookup silently do nothing.
     for md in [
         "# Hello World\n",
         "# Notes\n\n# notes\n\n# Notes\n",
@@ -125,7 +127,7 @@ fn outline_anchors_are_ids_that_exist() {
 
 #[test]
 fn duplicate_headings_get_distinct_anchors() {
-    // Otherwise every outline entry scrolls to the first heading.
+    // Otherwise every outline entry would share one identity.
     let headings = extract_headings("# Notes\n\n# notes\n\n# Notes\n");
     let anchors: Vec<&str> = headings.iter().map(|h| h.anchor.as_str()).collect();
     let unique: HashSet<&&str> = anchors.iter().collect();

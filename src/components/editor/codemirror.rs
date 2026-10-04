@@ -62,6 +62,23 @@ extern "C" {
     /// Same contract as above; implemented on the JS side by a later task.
     #[wasm_bindgen(js_name = __codedocs_setSourceVisible)]
     fn cm_set_source_visible(is_visible: bool);
+
+    /// Moves the cursor to `offset` (UTF-16 units) and scrolls it into view.
+    ///
+    /// The JS name must match the global exported by
+    /// `js/codemirror-bridge.mjs` exactly; `check-bridge-contract.mjs`
+    /// verifies this contract.
+    #[wasm_bindgen(js_name = __codedocs_setCursor)]
+    fn cm_set_cursor(offset: u32);
+}
+
+/// Move the editor cursor to `offset` (UTF-16 units, as carried by
+/// [`codedocs_core::markdown::Heading::offset`]) and scroll it into view.
+///
+/// Called by the outline panel: with no preview pane left, clicking a
+/// heading jumps the cursor there instead of scrolling a div.
+pub fn set_cursor(offset: u32) {
+    cm_set_cursor(offset);
 }
 
 /// CodeMirror 6 host component.

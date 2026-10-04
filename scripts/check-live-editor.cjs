@@ -579,6 +579,63 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.waitForTimeout(400);
   check("Enter continúa la cita", (await getContent()) === "> a\n> ", JSON.stringify(await getContent()));
 
+  // === Task 7: el outline mueve el cursor al encabezado ===
+  //
+  // Regresión de la Task 6: el click buscaba el heading por id en un panel de
+  // preview que ya no existe, así que no hacía absolutamente nada. Ahora mueve
+  // el cursor del editor al encabezado. Sin el fix el cursor se queda donde
+  // estaba y estos casos fallan; con offsets en bytes en vez de UTF-16 el caso
+  // acentuado falla.
+  check(
+    "el bundle expone __codedocs_setCursor",
+    await page.evaluate(() => typeof window.__codedocs_setCursor === "function"),
+  );
+  check(
+    "el bundle expone __codedocs_getCursor",
+    await page.evaluate(() => typeof window.__codedocs_getCursor === "function"),
+  );
+  // El outline vive en la pestaña "Contenido" del sidebar.
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Contenido");
+    if (tab) tab.click();
+  });
+  await page.waitForTimeout(400);
+
+  const clickOutlineEntry = (index) => page.evaluate((i) => {
+    const nav = document.querySelector('nav[aria-label="Contenido del documento"]');
+    if (!nav) return -1;
+    const btns = nav.querySelectorAll("button");
+    if (i >= btns.length) return -1;
+    btns[i].click();
+    return btns.length;
+  }, index);
+  const getCursor = () => page.evaluate(() => window.__codedocs_getCursor());
+
+  // Case: click en el segundo encabezado — el cursor salta ahí.
+  await setContent("# Primero\n\ntexto\n\n## Segundo\n\nmás\n\n### Tercero\n");
+  await page.waitForTimeout(500);
+  await focusEditor();
+  await page.keyboard.press("Control+Home"); // cursor a 0: sin el fix se queda acá
+  await page.waitForTimeout(200);
+  const outlineCount = await clickOutlineEntry(1);
+  await page.waitForTimeout(400);
+  const cursorAfterClick = await getCursor();
+  const expectedSecond = await page.evaluate(() => window.__codedocs_getContent().indexOf("## Segundo"));
+  check("el outline lista los tres encabezados", outlineCount === 3, `entradas=${outlineCount}`);
+  check("click en el outline mueve el cursor al encabezado", cursorAfterClick === expectedSecond, `cursor=${cursorAfterClick} esperado=${expectedSecond}`);
+
+  // Case: con texto acentuado y emoji antes — el offset es UTF-16, no bytes.
+  await setContent("# Cáfé 😀\n\n## Segundo\n");
+  await page.waitForTimeout(500);
+  await focusEditor();
+  await page.keyboard.press("Control+Home");
+  await page.waitForTimeout(200);
+  await clickOutlineEntry(1);
+  await page.waitForTimeout(400);
+  const cursorAccented = await getCursor();
+  const expectedAccented = await page.evaluate(() => window.__codedocs_getContent().indexOf("## Segundo"));
+  check("con acentos el cursor cae en el encabezado", cursorAccented === expectedAccented, `cursor=${cursorAccented} esperado=${expectedAccented}`);
+
   for (const e of errors) {
     if (/reading 'then'|\.then.*undefined|panicked|assertion/i.test(e)) {
       problems.push("runtime error: " + e.split("\n")[0].slice(0, 160));

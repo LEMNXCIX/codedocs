@@ -195,6 +195,36 @@ window.__codedocs_focus = function () {
   if (currentView) currentView.focus();
 };
 
+/**
+ * Moves the cursor to `offset` (UTF-16 units, as CodeMirror counts them)
+ * and scrolls it into view. Called by the outline panel: with no preview
+ * pane left, clicking a heading jumps the cursor there instead of
+ * scrolling a div. The offset is clamped into the document so a stale
+ * outline entry cannot throw.
+ */
+window.__codedocs_setCursor = function (offset) {
+  if (!currentView) return;
+  const view = currentView;
+  const pos = Math.max(0, Math.min(offset | 0, view.state.doc.length));
+  view.dispatch({
+    selection: { anchor: pos },
+    scrollIntoView: true,
+  });
+  view.focus();
+};
+
+/**
+ * Returns the main cursor position (UTF-16 units). Only the regression
+ * script uses it, to check that an outline click moved the cursor; the
+ * Rust side has no use for it, so it is deliberately not in the
+ * `extern "C"` block (`check-bridge-contract.mjs` only requires every
+ * Rust-declared global to exist, not the reverse).
+ */
+window.__codedocs_getCursor = function () {
+  if (!currentView) return 0;
+  return currentView.state.selection.main.head;
+};
+
 window.__codedocs_destroyEditor = function () {
   if (currentView) {
     currentView.destroy();

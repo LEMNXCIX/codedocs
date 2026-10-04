@@ -83,7 +83,7 @@ pub struct LiveSpans {
 
 /// Inicios de línea en índices de byte y en unidades UTF-16, para traducir los
 /// offsets de `pulldown-cmark` a los que cuenta CodeMirror.
-struct Utf16Index<'a> {
+pub(crate) struct Utf16Index<'a> {
     text: &'a str,
     /// Byte offset where each line starts; always begins with 0.
     line_byte: Vec<usize>,
@@ -92,7 +92,7 @@ struct Utf16Index<'a> {
 }
 
 impl<'a> Utf16Index<'a> {
-    fn new(text: &'a str) -> Self {
+    pub(crate) fn new(text: &'a str) -> Self {
         let mut line_byte = vec![0];
         let mut line_utf16 = vec![0];
         let mut units: u32 = 0;
@@ -112,7 +112,7 @@ impl<'a> Utf16Index<'a> {
 
     /// Byte offset → UTF-16 units. `None` when the offset is outside the
     /// document or lands in the middle of a character.
-    fn to_utf16(&self, byte_offset: usize) -> Option<u32> {
+    pub(crate) fn to_utf16(&self, byte_offset: usize) -> Option<u32> {
         if byte_offset > self.text.len() {
             return None;
         }

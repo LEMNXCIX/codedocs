@@ -1,13 +1,15 @@
 use leptos::prelude::*;
 
+use crate::components::editor::codemirror::set_cursor;
 use crate::state::EditorState;
 use crate::utils::markdown::Heading;
 
 /// Panel listing the current document's headings.
 ///
-/// Each entry is a button that scrolls the preview to that heading. The previous
-/// version rendered buttons with no handler at all — dead UI that looked
-/// interactive.
+/// Each entry is a button that moves the editor cursor to that heading. The
+/// preview this used to scroll is gone — the live editor owns the document
+/// — so jumping the cursor (and scrolling it into view) is what a click
+/// does now.
 #[component]
 pub fn OutlinePanel(state: EditorState) -> impl IntoView {
     view! {
@@ -42,12 +44,11 @@ fn OutlineLink(heading: Heading) -> impl IntoView {
     // `saturating_sub` guards the cast: a malformed level of 0 would otherwise
     // wrap to a huge `usize` and blow up the padding.
     let indent = heading.level.saturating_sub(1) as usize * 12;
-    // `anchor` comes from the renderer, not from re-slugifying `text`. That
-    // distinction matters: the renderer deduplicates repeated headings and falls
-    // back to `seccion` when a heading has no slug-worthy characters, so a
-    // recomputed slug would point at an id that does not exist.
-    let anchor = heading.anchor;
+    // The jump target is `offset` (UTF-16 units, as CodeMirror counts them):
+    // with no preview pane left there is no element with the anchor id in
+    // the DOM, so scrolling by id silently did nothing.
     let label = heading.text;
+    let offset = heading.offset as u32;
 
     view! {
         <button
@@ -57,38 +58,26 @@ fn OutlineLink(heading: Heading) -> impl IntoView {
                    transition-colors truncate"
             style:padding-left=format!("{}px", indent + 4)
             title=label.clone()
-            on:click=move |_| scroll_to_heading(&anchor)
+            on:click=move |_| set_cursor(offset)
         >
             {label.clone()}
         </button>
     }
 }
 
-/// Scroll the preview to the heading with this anchor.
-///
-/// Slug generation must match the renderer's; if the two ever disagree this
-/// silently does nothing, so it is centralised here and unit-tested.
-fn scroll_to_heading(anchor: &str) {
-    let Some(element) = leptos::prelude::document().get_element_by_id(anchor) else {
-        return;
-    };
-    element.scroll_into_view();
-}
-
 /// Heading slug, shared with the renderer.
 ///
-/// Not reimplemented here: the outline scrolls by id, and those ids come from
-/// the renderer. Two copies of this function would drift and silently break
-/// scrolling. The panel itself uses [`Heading::anchor`] — the exact id the
-/// renderer emitted — rather than re-slugifying the heading text, because the
-/// renderer deduplicates repeated headings and falls back to `seccion` when a
-/// heading has no slug-worthy characters.
+/// The outline jumps the cursor by `offset` now, not by id, but the renderer
+/// still emits these ids and `extract_headings` still carries them, so the
+/// agreement is pinned here: two copies of the slug function would drift
+/// and silently break anything that looks a heading up by id.
 #[cfg(test)]
 mod tests {
     #[test]
     fn every_outline_anchor_exists_in_the_rendered_html() {
-        // The contract the scroll behaviour depends on: each anchor the outline
-        // looks up must be an id the renderer actually emitted.
+        // The renderer still emits these ids and `extract_headings` still
+        // carries them; anything that looks a heading up by id depends on
+        // this agreement holding.
         for md in [
             "# Hello World\n",
             "# Notes\n\n# notes\n\n# Notes\n",
@@ -112,7 +101,7 @@ mod tests {
 
     #[test]
     fn duplicate_headings_get_distinct_anchors() {
-        // Otherwise every entry in the outline scrolls to the first heading.
+        // Otherwise every outline entry would share one identity.
         let headings = codedocs_core::extract_headings("# Notes\n\n# notes\n\n# Notes\n");
         let anchors: Vec<&str> = headings.iter().map(|h| h.anchor.as_str()).collect();
         let unique: std::collections::HashSet<&&str> = anchors.iter().collect();

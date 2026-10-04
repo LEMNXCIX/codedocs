@@ -30,6 +30,7 @@ use std::collections::HashMap;
 
 use pulldown_cmark::{html, CodeBlockKind, CowStr, Event, Options, Parser, Tag, TagEnd};
 
+use live::Utf16Index;
 pub use live::{live_spans, LiveSpans, SpanTag};
 pub use math::{split_math, MathPiece};
 pub use sanitize::is_safe_url;
@@ -47,6 +48,14 @@ pub struct Heading {
     /// `text` alone produces ids that do not exist and silently fails to
     /// scroll.
     pub anchor: String,
+    /// Cursor position of the start of the heading, in UTF-16 code units.
+    ///
+    /// This is what the outline hands to the editor so a click moves the
+    /// cursor there. It must be UTF-16, not bytes: CodeMirror counts columns
+    /// in UTF-16 units, so a byte offset past any `ñ` or emoji lands the
+    /// cursor in the wrong place. Converted with the same [`Utf16Index`] the
+    /// live spans use.
+    pub offset: usize,
 }
 
 pub(crate) fn parser_options() -> Options {
@@ -74,33 +83,31 @@ pub fn render_markdown(content: &str) -> String {
 /// and links included) rather than stopping at the first text node, so
 /// `## Hello **world**` yields `Hello world`.
 pub fn extract_headings(content: &str) -> Vec<Heading> {
-    let parser = Parser::new_ext(content, parser_options());
-    let mut headings: Vec<Heading> = Vec::new();
+    let parser = Parser::new_ext(content, parser_options()).into_offset_iter();
     // Same allocator the renderer uses, in the same document order, so the
     // anchors returned here match the ids it emits exactly.
     let mut used_slugs: HashMap<String, usize> = HashMap::new();
-    let mut open: Option<(u8, String)> = None;
+    // Byte offset of the `#` while a heading is open; translated to UTF-16
+    // only at the end (see below).
+    let mut open: Option<(u8, String, usize)> = None;
+    let mut raw: Vec<(u8, String, String, usize)> = Vec::new();
 
-    for event in parser {
+    for (event, range) in parser {
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
-                open = Some((level as u8, String::new()));
+                open = Some((level as u8, String::new(), range.start));
             }
             Event::End(TagEnd::Heading(_)) => {
-                if let Some((level, text)) = open.take() {
+                if let Some((level, text, start)) = open.take() {
                     let text = text.trim();
                     if !text.is_empty() {
                         let anchor = unique_slug(text, &mut used_slugs);
-                        headings.push(Heading {
-                            level,
-                            text: text.to_string(),
-                            anchor,
-                        });
+                        raw.push((level, text.to_string(), anchor, start));
                     }
                 }
             }
             Event::Text(t) | Event::Code(t) => {
-                if let Some((_, ref mut acc)) = open {
+                if let Some((_, ref mut acc, _)) = open {
                     // Separate nodes with a single space only when neither side
                     // already provides whitespace, so `**world**` inside a
                     // heading does not gain a double space.
@@ -117,7 +124,29 @@ pub fn extract_headings(content: &str) -> Vec<Heading> {
         }
     }
 
-    headings
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    // Byte offsets from the parser are translated to the UTF-16 units the
+    // editor counts (see `Heading::offset`), reusing the same `Utf16Index`
+    // the live spans use. Built lazily: a document with no headings — the
+    // common case mid-keystroke on long prose — pays nothing extra.
+    let index = Utf16Index::new(content);
+    raw.into_iter()
+        .map(|(level, text, anchor, start)| {
+            // `start` is the byte offset of the `#` (or of the content for
+            // setext headings). A parser range always starts on a character
+            // boundary, so the conversion cannot fail; `unwrap_or(0)` is a
+            // backstop, never a path.
+            let offset = index.to_utf16(start).unwrap_or(0) as usize;
+            Heading {
+                level,
+                text,
+                anchor,
+                offset,
+            }
+        })
+        .collect()
 }
 
 /// What kind of fenced block we are currently inside.
@@ -782,12 +811,14 @@ mod tests {
                 Heading {
                     level: 1,
                     text: "One".into(),
-                    anchor: "one".into()
+                    anchor: "one".into(),
+                    offset: 0,
                 },
                 Heading {
                     level: 2,
                     text: "Two".into(),
-                    anchor: "two".into()
+                    anchor: "two".into(),
+                    offset: 13,
                 },
             ]
         );
@@ -809,7 +840,8 @@ mod tests {
             vec![Heading {
                 level: 1,
                 text: "real".into(),
-                anchor: "real".into()
+                anchor: "real".into(),
+                offset: 25,
             }]
         );
     }
@@ -820,6 +852,31 @@ mod tests {
     }
 
     #[test]
+    fn extract_headings_offsets_point_at_the_heading_start() {
+        // Offsets are document positions the editor can jump to: the first
+        // heading starts at 0, the second where its `#` is.
+        let md = "# One\n\ntext\n\n## Two\n";
+        let hs = extract_headings(md);
+        assert_eq!(hs.len(), 2);
+        assert_eq!(hs[0].offset, 0);
+        assert_eq!(hs[1].offset, md.find("## Two").unwrap());
+    }
+
+    #[test]
+    fn extract_headings_offsets_are_utf16_not_bytes() {
+        // `# Cáfé 😀` is 14 bytes but 10 UTF-16 units before the newline; a
+        // byte offset would land the cursor past the heading. The second
+        // heading must be at 11 UTF-16 units, not 15 bytes.
+        let md = "# Cáfé 😀\n\n## Segundo\n";
+        let hs = extract_headings(md);
+        assert_eq!(hs.len(), 2);
+        assert_eq!(hs[0].offset, 0);
+        let expected = md[..md.find("## Segundo").unwrap()].encode_utf16().count();
+        assert_eq!(expected, 11);
+        assert_eq!(hs[1].offset, expected);
+    }
+
+    #[test]
     fn setext_headings_are_found() {
         let hs = extract_headings("Title\n=====\n");
         assert_eq!(
@@ -827,7 +884,8 @@ mod tests {
             vec![Heading {
                 level: 1,
                 text: "Title".into(),
-                anchor: "title".into()
+                anchor: "title".into(),
+                offset: 0,
             }]
         );
     }
