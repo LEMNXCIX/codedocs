@@ -3,8 +3,8 @@ name = "codedocs-ui"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
+codedocs-core = { path = "codedocs-core" }
 leptos = { version = "0.8", features = ["csr"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -12,10 +12,12 @@ js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1.7"
-pulldown-cmark = "0.13.0"
-regex-lite = "0.1"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "DomTokenList"] }
-
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "DomTokenList", "DomRect", "ScrollToOptions"] }
 
 [workspace]
-members = ["src-tauri"]
+members = ["codedocs-core", "src-tauri"]
+
+# The frontend is a binary crate for the wasm32 target; keep it out of the way
+# of `cargo test` on the host, which only cares about `codedocs-core`.
+[profile.dev]
+opt-level = 0

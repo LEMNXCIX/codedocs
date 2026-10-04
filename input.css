@@ -258,6 +258,49 @@
   border-bottom-color: rgba(47, 47, 47, 0.5);
 }
 
+/* The renderer emits `<span class="math-display">` inside a paragraph, so it
+   needs its own line. `.math-inline` needs no layout change. */
+.prose .math-display {
+  display: block;
+  text-align: center;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Before KaTeX renders, the span still holds raw TeX: let it wrap instead of
+   pushing the paragraph wide. */
+.prose .math-display:not([data-cd-done]) {
+  white-space: pre-wrap;
+}
+
+/* The renderer emits `<pre class="mermaid-block">` holding the diagram source
+   as text content; preview-bridge replaces the contents with an <svg>. The
+   `!important` matches `.prose pre` above, which wins on specificity. */
+.prose .mermaid-block {
+  overflow-x: auto !important;
+  text-align: center;
+}
+
+.prose .mermaid-block svg {
+  display: inline-block;
+  height: auto;
+  /* Deliberately no max-width: an over-wide diagram should scroll inside the
+     block (see overflow-x above) rather than shrink into unreadability. */
+}
+
+/* Diagram source shown when mermaid fails to load or the diagram is invalid. */
+.prose .mermaid-block[data-cd-done] > pre {
+  text-align: left;
+  white-space: pre-wrap;
+  /* `!important` to beat the `.prose pre` rules above, which are important. */
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .codemirror-container .cm-editor {
   height: 100%;
   font-size: 14px;
@@ -291,3 +334,78 @@
 .codemirror-container .cm-editor .cm-activeLine {
   background-color: rgba(255, 183, 77, 0.03);
 }
+
+/* Live-format mode: the markdown stays the document, decorations only style
+   it. The `.prose` typography styles do not apply inside CodeMirror (that
+   class lives on the preview div), so the editor gets its own set, each with
+   a `dark:` counterpart — without them the live view is unreadable at night.
+   Hidden syntax uses `font-size: 0` and NOT `display: none`: with
+   `display: none` the caret gets stuck at the offset and cannot cross the
+   marker. */
+.cm-editor .cm-lp-hidden { font-size: 0; }
+
+.cm-editor .cm-lp-strong { font-weight: 700; }
+.cm-editor .cm-lp-emphasis { font-style: italic; }
+.cm-editor .cm-lp-strikethrough { text-decoration: line-through; }
+.cm-editor .cm-lp-inlinecode {
+  background-color: #E6E7E7;
+  padding: 0 0.3em;
+  border-radius: 0.25rem;
+}
+.cm-editor .cm-lp-link {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+.cm-editor .cm-lp-h1 { font-size: 1.6rem; font-weight: 700; line-height: 1.3; }
+.cm-editor .cm-lp-h2 { font-size: 1.35rem; font-weight: 700; }
+.cm-editor .cm-lp-h3 { font-size: 1.2rem; font-weight: 700; }
+.cm-editor .cm-lp-h4 { font-size: 1.1rem; font-weight: 700; }
+.cm-editor .cm-lp-h5 { font-size: 1rem; font-weight: 700; }
+.cm-editor .cm-lp-h6 { font-size: 0.9rem; font-weight: 700; }
+.cm-editor .cm-lp-quote {
+  border-left: 3px solid var(--brand-orange);
+  padding-left: 0.75rem;
+  font-style: italic;
+}
+
+/* Table rows are NOT a real <table>: one would fight CodeMirror for the
+   caret and for per-cell selection, so rows stay lines with their pipes
+   hidden (see TAG_TABLE_PIPE) and lay out as flex, keeping the cells of a
+   row on the same visual line. */
+.cm-editor .cm-lp-table-row { display: flex; gap: 1.5rem; }
+
+/* Images never load here, and that is not this widget's bug: the CSP holds
+   `img-src 'self' data: blob:`, so a workspace-relative `![](foto.png)`
+   cannot resolve (broken in the preview too). The widget shows the alt text
+   with the path in the `title` tooltip instead of an <img>. */
+.cm-editor .cm-lp-image {
+  display: inline-block;
+  padding: 0 0.5em;
+  border: 1px dashed #A3A4A4;
+  border-radius: 0.25rem;
+  background-color: #F4F5F5;
+  font-size: 0.85em;
+}
+
+.cm-editor .cm-lp-math-block {
+  text-align: center;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.cm-editor .cm-lp-mermaid {
+  text-align: center;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.cm-editor .cm-lp-mermaid svg {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.dark .cm-editor .cm-lp-inlinecode { background-color: #3D3E3E; }
+.dark .cm-editor .cm-lp-link { color: #93c5fd; }
+.dark .cm-editor .cm-lp-quote { border-left-color: var(--brand-orange); }
+.dark .cm-editor .cm-lp-image { background-color: #3D3E3E; border-color: #5F6060; }
