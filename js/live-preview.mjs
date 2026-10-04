@@ -187,7 +187,9 @@ export function buildDecorations(state, getSpanProvider, isSourceVisible) {
   // allocation) per span — tens of thousands of them on a big document.
   let curLine = null;
   const lineNoAt = (pos) => {
-    if (!curLine || pos > curLine.to) curLine = doc.lineAt(pos);
+    // Both bounds: the block-widget branch below queries `to` ahead of the
+    // next span's `from`, so positions are not always monotonic.
+    if (!curLine || pos > curLine.to || pos < curLine.from) curLine = doc.lineAt(pos);
     return curLine.number;
   };
   const marks = [];
