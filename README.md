@@ -32,8 +32,9 @@ El editor abre **una carpeta a la vez**, no un archivo suelto: el documento, el
 - **Detección de cambios externos** con `notify`: si editás el archivo desde otro
   programa, el preview se recarga solo (siempre que no tengas cambios sin
   guardar).
-- **Vista Split** (`Ctrl+3`) con editor y preview lado a lado, más los modos Raw
-  (`Ctrl+1`) y Format (`Ctrl+2`), y el toggle `Ctrl+0`.
+- **Editor en vivo**: el formato se muestra directamente mientras escribís, sin
+  panel de preview separado. `Ctrl+/` alterna la vista de la fuente Markdown
+  (con el estilo conservado).
 - **Tema claro/oscuro** con doble clic en el logo.
 - **Conteo de palabras y caracteres** en la barra de estado.
 - **Atajos de teclado** declarados en una sola tabla (`src/shortcuts.rs`).
@@ -104,7 +105,7 @@ codedocs/
 ├── src/                   # frontend Leptos (WASM)
 │   ├── main.rs
 │   ├── app.rs
-│   ├── state.rs           # EditorState, ViewMode, SaveState
+│   ├── state.rs           # EditorState, SaveState
 │   ├── actions.rs         # operaciones: abrir, guardar, crear, borrar, renombrar
 │   ├── shortcuts.rs       # tabla de atajos
 │   ├── watch.rs           # suscripción al vigilante de archivos

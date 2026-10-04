@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::state::{EditorState, ViewMode};
+use crate::state::EditorState;
 
 #[wasm_bindgen]
 extern "C" {
@@ -61,7 +61,6 @@ extern "C" {
     ///
     /// Same contract as above; implemented on the JS side by a later task.
     #[wasm_bindgen(js_name = __codedocs_setSourceVisible)]
-    #[allow(dead_code)]
     fn cm_set_source_visible(is_visible: bool);
 }
 
@@ -78,9 +77,8 @@ extern "C" {
 ///   editor last reported. Without that, the editor's own change event would
 ///   feed back into the signal and re-trigger the sync effect forever.
 /// * The JS side keeps a single editor instance, so mounting a second one
-///   destroys the first. Only one pane may therefore contain this component at
-///   a time — `EditorPane` guarantees that by switching modes rather than
-///   hiding a pane with CSS.
+///   destroys the first. Only one `CodeMirrorEditor` may therefore be mounted
+///   at a time.
 #[component]
 pub fn CodeMirrorEditor(state: EditorState, on_save: Callback<()>) -> impl IntoView {
     let container_ref = NodeRef::<leptos::html::Div>::new();
@@ -160,6 +158,17 @@ pub fn CodeMirrorEditor(state: EditorState, on_save: Callback<()>) -> impl IntoV
         }
     });
 
+    // Push the source-visibility toggle into the editor. The toggle lives in
+    // Rust (`EditorCommand::ToggleSource` flips `state.source_mode`), so this
+    // effect is the single path into JS — nothing else calls
+    // `__codedocs_setSourceVisible`.
+    Effect::new(move |_| {
+        let visible = state.source_mode.get();
+        if mounted.get_untracked() {
+            cm_set_source_visible(visible);
+        }
+    });
+
     on_cleanup(cm_destroy);
 
     view! {
@@ -184,35 +193,13 @@ pub enum EditorCommand {
     Strikethrough,
     Link,
     Focus,
-    ViewRaw,
-    ViewSplit,
-    ViewFormatted,
-    ToggleView,
+    ToggleSource,
     NewFile,
 }
 
 impl EditorCommand {
-    /// `true` when this command only makes sense with the editor visible.
-    ///
-    /// Guarding these keeps a shortcut from writing into a hidden, destroyed
-    /// CodeMirror instance.
-    pub fn needs_editor(self) -> bool {
-        matches!(
-            self,
-            Self::Bold
-                | Self::Italic
-                | Self::InlineCode
-                | Self::Strikethrough
-                | Self::Link
-                | Self::Focus
-        )
-    }
-
     /// Run the command.
     pub fn run(self, state: EditorState, on_save: Callback<()>) {
-        if self.needs_editor() && !self.is_editing(state) {
-            return;
-        }
         match self {
             Self::Save => on_save.run(()),
             Self::Bold => cm_toggle_wrap("**"),
@@ -221,27 +208,12 @@ impl EditorCommand {
             Self::Strikethrough => cm_toggle_wrap("~~"),
             Self::Link => cm_insert_link(),
             Self::Focus => cm_focus(),
-            Self::ViewRaw => state.view_mode.set(ViewMode::Raw),
-            Self::ViewSplit => state.view_mode.set(ViewMode::Split),
-            Self::ViewFormatted => state.view_mode.set(ViewMode::Formatted),
-            Self::ToggleView => {
-                state.view_mode.set(match state.view_mode.get_untracked() {
-                    ViewMode::Raw => ViewMode::Split,
-                    _ => ViewMode::Raw,
-                });
-            }
+            Self::ToggleSource => state.source_mode.update(|b| *b = !*b),
             Self::NewFile => match state.path.get_untracked() {
                 Some(folder) => crate::actions::create_file(state, folder),
                 None => state.notify("Abrí una carpeta antes de crear un archivo"),
             },
         }
-    }
-
-    fn is_editing(self, state: EditorState) -> bool {
-        matches!(
-            state.view_mode.get_untracked(),
-            ViewMode::Raw | ViewMode::Split
-        )
     }
 }
 
@@ -259,10 +231,7 @@ pub fn shortcut_for(command: EditorCommand) -> Option<(bool, &'static str)> {
         EditorCommand::Strikethrough => (true, "shift+s"),
         EditorCommand::Link => (true, "k"),
         EditorCommand::Focus => (true, "shift+f"),
-        EditorCommand::ViewRaw => (true, "1"),
-        EditorCommand::ViewSplit => (true, "3"),
-        EditorCommand::ViewFormatted => (true, "2"),
-        EditorCommand::ToggleView => (true, "0"),
+        EditorCommand::ToggleSource => (true, "/"),
         EditorCommand::NewFile => (true, "n"),
     })
 }

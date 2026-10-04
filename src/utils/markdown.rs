@@ -4,4 +4,4 @@
 //! also where its test suite is. This module is a thin re-export so existing
 //! call sites keep working.
 
-pub use codedocs_core::markdown::{extract_headings, render_markdown, Heading};
+pub use codedocs_core::markdown::{extract_headings, Heading};

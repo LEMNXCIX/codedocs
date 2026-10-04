@@ -45,10 +45,7 @@ const SHORTCUTS: &[EditorCommand] = &[
     EditorCommand::Strikethrough,
     EditorCommand::Link,
     EditorCommand::Focus,
-    EditorCommand::ViewRaw,
-    EditorCommand::ViewSplit,
-    EditorCommand::ViewFormatted,
-    EditorCommand::ToggleView,
+    EditorCommand::ToggleSource,
     EditorCommand::NewFile,
 ];
 
@@ -103,10 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn editing_commands_require_an_editor() {
-        assert!(EditorCommand::Bold.needs_editor());
-        assert!(EditorCommand::Link.needs_editor());
-        assert!(!EditorCommand::Save.needs_editor());
-        assert!(!EditorCommand::ViewRaw.needs_editor());
+    fn source_toggle_is_bound_to_ctrl_slash() {
+        assert_eq!(shortcut_for(EditorCommand::ToggleSource), Some((true, "/")));
     }
 }

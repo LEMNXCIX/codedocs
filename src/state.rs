@@ -3,18 +3,6 @@ use leptos::prelude::*;
 use crate::types::FileEntry;
 use crate::utils::markdown::Heading;
 
-/// Which pane the editor is showing.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum ViewMode {
-    /// Source only.
-    #[default]
-    Raw,
-    /// Rendered preview only.
-    Formatted,
-    /// Editor and preview side by side.
-    Split,
-}
-
 /// Whether the on-disk file matches the buffer.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub enum SaveState {
@@ -72,7 +60,7 @@ pub struct EditorState {
     /// quickly cannot leave file A's content sitting under file B's name.
     pub open_token: RwSignal<u64>,
     pub headings: RwSignal<Vec<Heading>>,
-    pub view_mode: RwSignal<ViewMode>,
+    pub source_mode: RwSignal<bool>,
     pub is_dark: RwSignal<bool>,
     pub sidebar_width: RwSignal<f64>,
     pub is_resizing_sidebar: RwSignal<bool>,
@@ -90,7 +78,7 @@ impl EditorState {
             save_state: RwSignal::new(SaveState::Idle),
             open_token: RwSignal::new(0),
             headings: RwSignal::new(Vec::new()),
-            view_mode: RwSignal::new(ViewMode::Formatted),
+            source_mode: RwSignal::new(false),
             is_dark: RwSignal::new(false),
             sidebar_width: RwSignal::new(280.0),
             is_resizing_sidebar: RwSignal::new(false),

@@ -84,12 +84,7 @@ fn scroll_to_heading(anchor: &str) {
 /// renderer deduplicates repeated headings and falls back to `seccion` when a
 /// heading has no slug-worthy characters.
 #[cfg(test)]
-pub use codedocs_core::markdown::slugify;
-
-#[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn every_outline_anchor_exists_in_the_rendered_html() {
         // The contract the scroll behaviour depends on: each anchor the outline

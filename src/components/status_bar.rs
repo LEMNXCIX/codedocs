@@ -1,8 +1,8 @@
 use crate::actions;
-use crate::state::{EditorState, ViewMode};
+use crate::state::EditorState;
 use leptos::prelude::*;
 
-/// Status bar: view-mode switch, document stats, save indicator.
+/// Status bar: document stats and save indicator.
 #[component]
 pub fn StatusBar(state: EditorState, on_save: Callback<()>) -> impl IntoView {
     view! {
@@ -10,8 +10,6 @@ pub fn StatusBar(state: EditorState, on_save: Callback<()>) -> impl IntoView {
                       justify-between px-4 bg-base-50 dark:bg-base-900/80 backdrop-blur-md \
                       z-20 flex-shrink-0">
             <div class="flex items-center gap-3">
-                <ViewModeSwitch state />
-                <div class="h-3 w-px bg-base-200 dark:bg-base-800"></div>
                 <span class="text-[10px] font-mono text-base-400 dark:text-base-600">
                     {move || {
                         let content = state.content.get();
@@ -55,38 +53,6 @@ pub fn StatusBar(state: EditorState, on_save: Callback<()>) -> impl IntoView {
                 </button>
             </div>
         </footer>
-    }
-}
-
-/// Raw / Split / Format segmented control.
-#[component]
-fn ViewModeSwitch(state: EditorState) -> impl IntoView {
-    let options = [
-        (ViewMode::Raw, "Raw"),
-        (ViewMode::Split, "Split"),
-        (ViewMode::Formatted, "Format"),
-    ];
-
-    view! {
-        <div class="flex gap-0.5 bg-base-100 dark:bg-base-800/50 rounded-md p-0.5">
-            {options.into_iter().map(|(mode, label)| {
-                view! {
-                    <button
-                        class=move || format!(
-                            "px-2.5 py-0.5 rounded text-[11px] font-medium transition-all {}",
-                            if state.view_mode.get() == mode {
-                                "bg-base-50 dark:bg-base-700 text-base-900 dark:text-base-50 shadow-sm"
-                            } else {
-                                "text-base-500 dark:text-base-400 hover:text-base-700 dark:hover:text-base-300"
-                            }
-                        )
-                        on:click=move |_| state.view_mode.set(mode)
-                    >
-                        {label}
-                    </button>
-                }
-            }).collect_view()}
-        </div>
     }
 }
 

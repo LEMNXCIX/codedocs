@@ -7,8 +7,8 @@ use crate::components::header::EditorHeader;
 use crate::components::modals::{AlertModal, DeleteConfirmModal, RenameConfirmModal};
 use crate::components::sidebar::Sidebar;
 use crate::components::status_bar::StatusBar;
-use crate::state::{EditorState, SaveState, ViewMode};
-use crate::utils::markdown::{extract_headings, render_markdown};
+use crate::state::{EditorState, SaveState};
+use crate::utils::markdown::extract_headings;
 
 /// Root layout: sidebar, editor pane, status bar, modals and toast.
 ///
@@ -21,7 +21,6 @@ pub fn Layout() -> impl IntoView {
     let state = EditorState::new();
     provide_context(state);
 
-    let preview_html = RwSignal::new(String::new());
     let autosave_timer: RwSignal<Option<AutosaveTimer>> = RwSignal::new(None);
     let (file_to_delete, set_file_to_delete) = signal::<Option<String>>(None);
     let (file_to_rename, set_file_to_rename) = signal::<Option<String>>(None);
@@ -30,30 +29,11 @@ pub fn Layout() -> impl IntoView {
     install_sidebar_resize(state);
     seed_theme(state);
 
-    // Re-render the preview and outline whenever the buffer changes. Doing the
-    // markdown parse in an effect rather than inline in `view!` keeps it off the
+    // Refresh the outline whenever the buffer changes. Doing the markdown
+    // parse in an effect rather than inline in `view!` keeps it off the
     // render path of every unrelated signal.
-    //
-    // The full-document HTML render is skipped while no preview pane is
-    // mounted (`Raw` mode): on a 5 000-line document it costs more than the
-    // live editor's whole per-keystroke pipeline, and nobody reads the
-    // result until a preview mounts. Tracking `view_mode` recomputes on the
-    // mode switch itself, so the preview is never stale when it appears.
-    // `headings` still updates every change — the sidebar outline reads it
-    // in every mode.
     Effect::new(move |_| {
         let content = state.content.get();
-        // The full-document HTML render is skipped while no preview pane is
-        // mounted (Raw mode): on a 5 000-line document it costs more than the
-        // live editor entire per-keystroke pipeline, and nobody reads the
-        // result until a preview mounts. Tracking view_mode recomputes on the
-        // mode switch itself, so the preview is never stale when it appears.
-        // headings still updates every change: the sidebar outline reads it in
-        // every mode. Task 6 deletes preview_html entirely and takes this
-        // guard with it.
-        if state.view_mode.get() != ViewMode::Raw {
-            preview_html.set(render_markdown(&content));
-        }
         state.headings.set(extract_headings(&content));
     });
 
@@ -107,7 +87,7 @@ pub fn Layout() -> impl IntoView {
 
                 <main class="flex-1 flex flex-col min-w-0 bg-base-50 dark:bg-base-900 overflow-hidden">
                     <EditorHeader state />
-                    <EditorPane state preview_html on_save />
+                    <EditorPane state on_save />
                 </main>
             </div>
 
