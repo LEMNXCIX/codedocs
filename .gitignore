@@ -54,3 +54,4 @@ node_modules/
 # Playwright, used only by the browser checks in scripts/
 /test-results/
 /playwright-report/
+.superpowers/
