@@ -288,6 +288,131 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   check("desbalanceado: no hay strong a medio abrir", unbalancedStrong === 0, `strong=${unbalancedStrong}`);
 
+  // === Task 4: math, Mermaid, tabla e imagen dentro del editor ===
+  //
+  // Cada caso mira el DOM de verdad (nodos `.katex`, `svg`, clases
+  // `.cm-lp-*`), no solo la ausencia de excepciones: con el widget roto o
+  // ausente el selector no aparece y el caso falla.
+
+  // Case: `$x^2$` sin cursor en la línea — KaTeX renderiza dentro del editor.
+  await setContent("$x^2$\ncola");
+  await page.keyboard.press("Control+End"); // cursor a "cola": la línea 1 se oculta
+  await page.waitForTimeout(800);
+  let katexCount = 0;
+  try {
+    await page.waitForSelector(".cm-editor .katex", { timeout: 8000 });
+    katexCount = await page.evaluate(() => document.querySelectorAll(".cm-editor .katex").length);
+  } catch {
+    katexCount = 0;
+  }
+  const mathWidget = await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-math-inline"));
+  check("math inline renderiza KaTeX", katexCount >= 1 && mathWidget, `katex=${katexCount} widget=${mathWidget}`);
+
+  // Case: cursor en la línea de `$x^2$` — se ve el fuente crudo.
+  await page.keyboard.press("ArrowUp"); // cursor a la línea 1: se revela
+  await page.waitForTimeout(500);
+  const katexRevealed = await page.evaluate(() => document.querySelectorAll(".cm-editor .katex").length);
+  const mathRaw = await page.evaluate(() => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[0];
+    return el ? el.textContent : null;
+  });
+  check("cursor en math muestra `$x^2$` crudo", katexRevealed === 0 && mathRaw === "$x^2$", `katex=${katexRevealed} texto=${JSON.stringify(mathRaw)}`);
+
+  // Case: `$$…$$` en bloque sin cursor — KaTeX en modo display.
+  await setContent("$$a^2 + b^2 = c^2$$\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(800);
+  let katexDisplay = 0;
+  try {
+    await page.waitForSelector(".cm-editor .katex", { timeout: 8000 });
+    katexDisplay = await page.evaluate(() => document.querySelectorAll(".cm-editor .katex").length);
+  } catch {
+    katexDisplay = 0;
+  }
+  const mathBlockWidget = await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-math-block"));
+  check("math display renderiza KaTeX", katexDisplay >= 1 && mathBlockWidget, `katex=${katexDisplay} widget=${mathBlockWidget}`);
+
+  // Case: bloque ```mermaid sin cursor — hay un svg dentro del editor.
+  const mermaidDoc = "```mermaid\ngraph TD;\n  A-->B;\n```\ncola";
+  await setContent(mermaidDoc);
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(800);
+  let svgCount = 0;
+  try {
+    await page.waitForSelector(".cm-editor svg", { timeout: 15000 });
+    svgCount = await page.evaluate(() => document.querySelectorAll(".cm-editor svg").length);
+  } catch {
+    svgCount = 0;
+  }
+  const mermaidWidget = await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-mermaid"));
+  check("mermaid renderiza un svg", svgCount >= 1 && mermaidWidget, `svg=${svgCount} widget=${mermaidWidget}`);
+
+  // Case: cursor en el bloque mermaid — se ve el código fuente.
+  await page.keyboard.press("ArrowUp"); // fin de "cola" -> línea del ``` de cierre: revela
+  await page.waitForTimeout(500);
+  const svgRevealed = await page.evaluate(() => document.querySelectorAll(".cm-editor svg").length);
+  const mermaidRaw = await page.evaluate(() =>
+    [...document.querySelectorAll(".cm-editor .cm-line")].map((el) => el.textContent).join("\n"),
+  );
+  check("cursor en mermaid muestra el fuente", svgRevealed === 0 && mermaidRaw.includes("graph TD;"), `svg=${svgRevealed} fuente=${mermaidRaw.includes("graph TD;")}`);
+
+  // Case: tabla de 2 columnas — pipes ocultos, celdas en la misma línea visual.
+  await setContent("| uno | dos |\n|---|---|\n| tres | cuatro |\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const tableRows = await page.evaluate(() => document.querySelectorAll(".cm-editor .cm-lp-table-row").length);
+  check("tabla: las filas llevan `.cm-lp-table-row`", tableRows >= 3, `filas=${tableRows}`);
+  check("tabla: las pipes no se ven", (await hiddenInLine(1)) >= 2, `hidden=${await hiddenInLine(1)}`);
+  const cellTop = await page.evaluate(() => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[0];
+    if (!el) return null;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let r1 = null;
+    let r2 = null;
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!r1 && node.nodeValue.includes("uno")) {
+        const r = document.createRange();
+        r.selectNodeContents(node);
+        r1 = [...r.getClientRects()][0];
+      }
+      if (!r2 && node.nodeValue.includes("dos")) {
+        const r = document.createRange();
+        r.selectNodeContents(node);
+        r2 = [...r.getClientRects()][0];
+      }
+    }
+    if (!r1 || !r2) return null;
+    return Math.abs(r1.top - r2.top);
+  });
+  check("tabla: las dos celdas quedan en la misma línea visual", cellTop !== null && cellTop <= 2, `dTop=${cellTop}`);
+
+  // Case: `![alt](foto.png)` — placeholder con el alt y la ruta en el title.
+  // (La imagen no carga: el CSP no resuelve rutas del workspace. Ver spec.)
+  await setContent("![alt](foto.png)\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const imgInfo = await page.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-image");
+    return el ? { text: el.textContent, title: el.getAttribute("title") } : null;
+  });
+  check("imagen muestra el alt con la ruta en el title", !!imgInfo && imgInfo.text === "alt" && imgInfo.title === "foto.png", JSON.stringify(imgInfo));
+
+  // Case: Mermaid con sintaxis inválida — muestra el fuente, sin excepción.
+  const errsBeforeBad = errors.length;
+  await setContent("```mermaid\nnot a diagram %%% $$$\n```\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(6000); // mermaid ya cargó: el render falla -> fuente
+  const badWidget = await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-mermaid"));
+  const badSvg = await page.evaluate(() => document.querySelectorAll(".cm-editor .cm-lp-mermaid svg").length);
+  const badRaw = await page.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-mermaid");
+    return el ? el.textContent : "";
+  });
+  const badFatal = errors.slice(errsBeforeBad).filter((e) => /^pageerror|uncaught|unhandled|reading 'then'/i.test(e));
+  check("mermaid inválido muestra el fuente", badWidget && badSvg === 0 && badRaw.includes("not a diagram"), `widget=${badWidget} svg=${badSvg} fuente=${badRaw.includes("not a diagram")}`);
+  check("mermaid inválido no lanza", badFatal.length === 0, JSON.stringify(badFatal.map((s) => s.slice(0, 120))));
+
   // Case: documento de 5 000 líneas — mediana de 20 pulsaciones < 50 ms,
   // del `dispatch` al `requestAnimationFrame` siguiente. La cuenta de líneas
   // sale del contenido: CodeMirror solo renderiza el viewport, así que
@@ -315,6 +440,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   const median = times.length ? times[Math.floor(times.length / 2)] : Infinity;
   check("mediana de 20 pulsaciones < 50 ms", median < 50, `mediana=${median.toFixed(2)}ms [${times.map((t) => t.toFixed(1)).join(",")}]`);
+
+  // Case: KaTeX que no carga — el widget muestra el fuente, sin excepción.
+  // Página aparte con `katex.min.js` abortado: el promise-cache del loader
+  // (`katexLoad`) retiene el fallo, así que no puede compartir la página
+  // principal, donde KaTeX ya cargó para los casos anteriores.
+  await context.route("**/katex.min.js", (r) => r.abort());
+  const page2 = await context.newPage();
+  const errors2 = [];
+  page2.on("console", (m) => {
+    if (m.type() === "error") errors2.push(m.text());
+  });
+  page2.on("pageerror", (e) => errors2.push("pageerror: " + e.message));
+  await page2.goto(`http://localhost:${PORT}/`, { waitUntil: "networkidle" });
+  await page2.waitForTimeout(2000);
+  await page2.keyboard.press("Control+1");
+  try {
+    await page2.waitForSelector(".cm-editor .cm-content", { timeout: 8000 });
+  } catch {
+    problems.push("sin KaTeX: el editor no montó tras Ctrl+1");
+  }
+  await page2.evaluate((t) => window.__codedocs_setContent(t), "$x^2$\ncola");
+  await page2.click(".cm-editor .cm-content"); // foco: sin esto el teclado no entra
+  await page2.waitForTimeout(300);
+  await page2.keyboard.press("Control+End");
+  await page2.waitForTimeout(3000); // inyección fallida -> fallback al fuente
+  const noKatexWidget = await page2.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-math-inline");
+    return el ? el.textContent : null;
+  });
+  const noKatexCount = await page2.evaluate(() => document.querySelectorAll(".cm-editor .katex").length);
+  check("sin KaTeX el widget muestra el fuente", noKatexCount === 0 && noKatexWidget === "$x^2$", `katex=${noKatexCount} texto=${JSON.stringify(noKatexWidget)}`);
+  const fatal2 = errors2.filter((e) => /^pageerror|uncaught|unhandled/i.test(e));
+  check("sin KaTeX no hay excepción", fatal2.length === 0, JSON.stringify(fatal2.map((s) => s.slice(0, 120))));
+  await page2.close();
 
   for (const e of errors) {
     if (/reading 'then'|\.then.*undefined|panicked|assertion/i.test(e)) {

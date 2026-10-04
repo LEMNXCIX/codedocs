@@ -368,6 +368,44 @@
   font-style: italic;
 }
 
+/* Table rows are NOT a real <table>: one would fight CodeMirror for the
+   caret and for per-cell selection, so rows stay lines with their pipes
+   hidden (see TAG_TABLE_PIPE) and lay out as flex, keeping the cells of a
+   row on the same visual line. */
+.cm-editor .cm-lp-table-row { display: flex; gap: 1.5rem; }
+
+/* Images never load here, and that is not this widget's bug: the CSP holds
+   `img-src 'self' data: blob:`, so a workspace-relative `![](foto.png)`
+   cannot resolve (broken in the preview too). The widget shows the alt text
+   with the path in the `title` tooltip instead of an <img>. */
+.cm-editor .cm-lp-image {
+  display: inline-block;
+  padding: 0 0.5em;
+  border: 1px dashed #A3A4A4;
+  border-radius: 0.25rem;
+  background-color: #F4F5F5;
+  font-size: 0.85em;
+}
+
+.cm-editor .cm-lp-math-block {
+  text-align: center;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.cm-editor .cm-lp-mermaid {
+  text-align: center;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.cm-editor .cm-lp-mermaid svg {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
 .dark .cm-editor .cm-lp-inlinecode { background-color: #3D3E3E; }
 .dark .cm-editor .cm-lp-link { color: #93c5fd; }
 .dark .cm-editor .cm-lp-quote { border-left-color: var(--brand-orange); }
+.dark .cm-editor .cm-lp-image { background-color: #3D3E3E; border-color: #5F6060; }

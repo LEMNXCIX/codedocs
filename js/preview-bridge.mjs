@@ -139,18 +139,29 @@ function showSource(el, code) {
   }
 }
 
-function renderMathNode(el, katex, displayMode) {
+/**
+ * Render one TeX fragment into `el` with an already-loaded KaTeX handle.
+ *
+ * The per-node core: the document scan (`renderMath`) and the lazy entry
+ * point (`renderMathInto`) both funnel here, so the editor widgets and the
+ * preview share the exact same fallback (source as plain text, never markup).
+ */
+function renderMathNodeInto(el, katex, source, displayMode) {
   if (isDone(el)) return;
   // Mark before rendering: katex.render rewrites this element's children, and
   // a retry loop over a broken formula would never settle.
   el.setAttribute(DONE_ATTR, "1");
-  var tex = el.textContent;
+  var tex = source;
   try {
     katex.render(tex, el, { throwOnError: false, displayMode: displayMode });
   } catch (e) {
     // katex may have replaced the children before throwing; put the source back.
     el.textContent = tex;
   }
+}
+
+function renderMathNode(el, katex, displayMode) {
+  renderMathNodeInto(el, katex, el.textContent, displayMode);
 }
 
 function renderMath(katex) {
@@ -167,20 +178,27 @@ function renderMath(katex) {
   }
 }
 
-function renderMermaidNode(el, mermaid, code) {
+/**
+ * Render one mermaid diagram with an already-loaded handle. Returns the
+ * in-flight promise (never rejects: every failure shows the source).
+ *
+ * The per-node core: the document scan (`renderMermaid`) and the lazy entry
+ * point (`renderMermaidInto`) both funnel here.
+ */
+function renderMermaidNodeInto(el, mermaid, code) {
   var id = uniqueId("mermaid");
   var result;
   try {
     result = mermaid.render(id, code);
   } catch (e) {
     showSource(el, code);
-    return;
+    return Promise.resolve();
   }
   if (!result || typeof result.then !== "function") {
     showSource(el, code);
-    return;
+    return Promise.resolve();
   }
-  result
+  return result
     .then(function (out) {
       if (out && out.svg) {
         // Trusted: mermaid generated this SVG itself.
@@ -192,6 +210,10 @@ function renderMermaidNode(el, mermaid, code) {
     .catch(function () {
       showSource(el, code);
     });
+}
+
+function renderMermaidNode(el, mermaid, code) {
+  renderMermaidNodeInto(el, mermaid, code);
 }
 
 function renderMermaid(mermaid) {
@@ -207,6 +229,58 @@ function renderMermaid(mermaid) {
     if (!code || !code.trim()) continue;
     renderMermaidNode(el, mermaid, code);
   }
+}
+
+/**
+ * Render one TeX fragment into `el`, loading KaTeX on demand.
+ *
+ * The entry point the live-preview widgets call: `el` is a fresh,
+ * detached node owned by the widget (not a preview placeholder), so the
+ * source arrives as a parameter instead of being read from the element.
+ * Returns a promise that never rejects: without the library (or on a
+ * render error) the fallback stays readable as plain text via `textContent`
+ * — never reparsed as markup. `loadKatex` is untouched: the ~5 MB stay out
+ * of the startup path exactly as before.
+ *
+ * `fallback` is what shows on failure paths (the widget passes the full
+ * span text, delimiters included); it defaults to `source` for the
+ * document-scan callers, which never pass it.
+ */
+function renderMathInto(el, source, isDisplay, fallback) {
+  var tex = String(source);
+  var raw = fallback === undefined ? tex : String(fallback);
+  return loadKatex().then(function (katex) {
+    if (!katex || typeof katex.render !== "function") {
+      el.textContent = raw;
+      return;
+    }
+    renderMathNodeInto(el, katex, tex, !!isDisplay);
+  }, function () {
+    el.textContent = raw;
+  });
+}
+
+/**
+ * Render one mermaid diagram into `el`, loading the library on demand.
+ * Same contract as `renderMathInto`: never throws, never rejects, source
+ * shown (via DOM construction) when the library or the diagram fails.
+ */
+function renderMermaidInto(el, source) {
+  var code = String(source);
+  try {
+    el.setAttribute(DONE_ATTR, "1");
+  } catch (e) {
+    noop();
+  }
+  return loadMermaid().then(function (mermaid) {
+    if (!mermaid || typeof mermaid.render !== "function") {
+      showSource(el, code);
+      return;
+    }
+    return renderMermaidNodeInto(el, mermaid, code);
+  }, function () {
+    showSource(el, code);
+  });
 }
 
 /** Kick off KaTeX rendering; returns immediately. */
@@ -258,6 +332,39 @@ window.__codedocs_render_enhancements = function () {
     window.__codedocs_render_mermaid();
   } catch (e) {
     noop();
+  }
+};
+
+/**
+ * Per-node entry points for the live-preview widgets. Both return a promise
+ * and never throw: a rejection here would surface as an unhandled rejection
+ * inside the editor on every keystroke. The `try/catch` is only belt and
+ * braces — `renderMathInto` / `renderMermaidInto` already resolve on every
+ * path — for the case where even reading the arguments fails.
+ */
+window.__codedocs_renderMathInto = function (el, source, isDisplay, fallback) {
+  try {
+    return renderMathInto(el, source, isDisplay, fallback);
+  } catch (e) {
+    try {
+      el.textContent = String(fallback === undefined ? source : fallback);
+    } catch (inner) {
+      noop();
+    }
+    return Promise.resolve();
+  }
+};
+
+window.__codedocs_renderMermaidInto = function (el, source) {
+  try {
+    return renderMermaidInto(el, source);
+  } catch (e) {
+    try {
+      showSource(el, String(source));
+    } catch (inner) {
+      noop();
+    }
+    return Promise.resolve();
   }
 };
 
