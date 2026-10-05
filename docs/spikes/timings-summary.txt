@@ -1,0 +1,9 @@
+RESULT label=base-dev profile=dev rc=0 seconds=163.6
+RESULT label=base-release profile=release rc=0 seconds=234.8
+RESULT label=typst-dev profile=dev rc=0 seconds=346.3
+RESULT label=typst-release profile=release rc=0 seconds=494.1
+RESULT label=typst2-dev profile=dev rc=0 seconds=244.1
+RESULT label=base2-dev profile=dev rc=0 seconds=149.5 endload=8.03 8.69 8.09
+RESULT label=base2-release profile=release rc=0 seconds=281.8 endload=10.45 11.82 9.75
+RESULT label=typst3-release profile=release rc=0 seconds=564.2 endload=15.09 14.34 11.77
+RESULT label=typst4-dev profile=dev rc=0 seconds=260.9 endload=9.32 11.93 11.43

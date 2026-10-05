@@ -229,7 +229,7 @@ codedocs/
 │   │   ├── commands/
 │   │   │   ├── mod.rs
 │   │   │   ├── fs.rs             # File CRUD operations
-│   │   │   ├── export.rs         # PDF, HTML, DOCX export
+│   │   │   ├── export.rs         # export a PDF (HTML y DOCX: no implementados)
 │   │   │   ├── search.rs         # Ripgrep-based global search
 │   │   │   └── image.rs          # Image save/optimize
 │   │   ├── state.rs              # App state management
@@ -542,8 +542,12 @@ CodeMirror 6 permite iterar rápido con un editor funcional. En Fase 2, si el WY
 #### 3.2 — Exportación
 
 - [ ] **HTML**: pulldown-cmark → HTML completo con estilos inline
-- [ ] **PDF**: via Tauri webview print-to-PDF o `wkhtmltopdf`
-  - `tauri::webview::print()` o usar headless browser
+- [x] **PDF**: markdown → Typst (`codedocs-core/src/markdown/typst.rs`) → CLI de Typst como subproceso
+  - Se descartó la librería embebida: multiplicaba por 4,86 el binario y duplicaba el build de release. El CLI produce la misma salida, verificada.
+  - **Las rutas de imagen se validan antes de llegar a Typst.** `--root` no bloquea un symlink dentro de la raíz, así que una nota podía incrustar un archivo arbitrario en el PDF.
+  - Botón en el header y `Ctrl+P`. Vive en `src-tauri/src/export.rs` y `src-tauri/src/pdf.rs`.
+  - Verificado por `scripts/check-export-pdf.cjs` (navegador, parte de `verify:browser`) y por los tests del backend, que ejecutan el compilador de verdad.
+  - La medicion que justifica esta decision esta en [`docs/spikes/`](spikes/2026-10-04-spike-typst-embedido-vs-cli.md): +59 MiB, 4,86x el binario y +282 s por build release limpio.
 - [ ] **DOCX**: via `pandoc` si está instalado, o `docx-rs` crate
 - [ ] **Markdown original**: save as (con front matter preservado)
 - [ ] Export dialog con opciones (format, template, include styles)
