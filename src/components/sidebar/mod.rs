@@ -36,7 +36,6 @@ pub fn Sidebar(
         >
             <div class="p-6 border-b border-base-200 dark:border-base-800">
                 <Logo state />
-                <div class="mb-6"><ModeBadge /></div>
                 <TabSwitch active_tab set_active_tab />
                 {move || match active_tab.get() {
                     SidebarTab::Files => view! {
@@ -74,6 +73,9 @@ pub fn Sidebar(
                                title=move || state.path.get().unwrap_or_default()>
                                 {move || state.path.get().unwrap_or_else(|| "Sin carpeta".into())}
                             </p>
+                            <Show when=move || state.tree_loaded.get() && state.files.get().is_empty()>
+                                <EmptyTree />
+                            </Show>
                             <FileTree items=state.files state on_delete on_rename />
                         </div>
                     }
@@ -149,25 +151,6 @@ fn Logo(state: EditorState) -> impl IntoView {
     }
 }
 
-/// Native vs browser-demo indicator.
-#[component]
-fn ModeBadge() -> impl IntoView {
-    let native = is_tauri();
-    view! {
-        <div class="flex items-center gap-2 px-3 py-1 bg-base-100 dark:bg-base-800 rounded-full \
-                    border border-base-200 dark:border-base-700 w-fit">
-            <span class=move || format!(
-                "w-2 h-2 rounded-full {}",
-                if native { "bg-base-900" } else { "bg-brand-orange" }
-            )></span>
-            <span class="text-[10px] font-bold text-base-500 dark:text-base-400 uppercase \
-                         tracking-tighter">
-                {if native { "Escritorio (Nativo)" } else { "Web (Demo Mode)" }}
-            </span>
-        </div>
-    }
-}
-
 #[component]
 fn TabSwitch(
     active_tab: ReadSignal<SidebarTab>,
@@ -216,12 +199,15 @@ fn OpenFolderButton(state: EditorState) -> impl IntoView {
             match tauri_bridge::open_project_folder().await {
                 Ok(path) => {
                     state.path.set(Some(path));
+                    // Same reason `adopt_workspace` does it: whatever the tree
+                    // shows right now belongs to the folder just left.
+                    state.tree_loaded.set(false);
                     actions::refresh_files(state);
                     watch_workspace(state);
                 }
                 Err(err) => {
                     // The user closing the picker is not an error worth showing.
-                    if !err.contains("cancelo") && !err.contains("cancel") {
+                    if !actions::is_cancelled(&err) {
                         leptos::logging::error!("No se pudo abrir la carpeta: {err}");
                         state.notify(format!("No se pudo abrir la carpeta: {err}"));
                     }
@@ -242,10 +228,46 @@ fn OpenFolderButton(state: EditorState) -> impl IntoView {
     }
 }
 
+/// What the sidebar shows when a folder is open and holds no markdown.
+///
+/// An empty folder used to arrive as a backend *error* — "No se encontraron
+/// archivos Markdown…" — which is not what happened: the folder was fine, it just
+/// had nothing in it yet. `list_markdown_files` returns an empty tree for that now
+/// (see `tree_outcome` in the backend), and this is where the state becomes
+/// visible instead of an error toast that appeared a second before the save it
+/// was blocking.
+///
+/// Only rendered once the folder's tree has actually come back *and* came back
+/// empty. The emptiness test sits in the parent, whose reactive scope re-reads
+/// the tree on every refresh; a `files` read in this component's own scope would
+/// be initialised once and never update, so the note would outlive the file that
+/// made it disappear. The wrapper is a `<div>` because it holds two `<p>`s, which
+/// a `<p>` cannot do; the browser checks read the folder path above as the
+/// sidebar's first paragraph, and this must not take that slot.
+#[component]
+fn EmptyTree() -> impl IntoView {
+    view! {
+        <div
+            class="mt-4 px-3 py-4 rounded-md border border-dashed \
+                   border-base-200 dark:border-base-800 text-center"
+        >
+            <p class="text-xs text-base-500 dark:text-base-400 leading-relaxed">
+                "Esta carpeta no tiene archivos Markdown todavía."
+            </p>
+            <Show when=move || is_tauri()>
+                <p class="mt-2 text-[11px] text-base-400 dark:text-base-600 leading-relaxed">
+                    "Podés crear el primero con «Nuevo Archivo»."
+                </p>
+            </Show>
+        </div>
+    }
+}
+
 /// Populate the tree with demo data in the browser build.
 fn load_demo_folder(state: EditorState) {
     const DEMO_ROOT: &str = "C:\\Demo\\Documents";
     state.path.set(Some(DEMO_ROOT.to_string()));
+    state.tree_loaded.set(true);
     state.files.set(vec![
         FileEntry::file("Bienvenido.md", format!("{DEMO_ROOT}\\Bienvenido.md")),
         FileEntry::file("Guía_Rápida.md", format!("{DEMO_ROOT}\\Guía_Rápida.md")),

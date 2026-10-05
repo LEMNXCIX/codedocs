@@ -49,6 +49,14 @@ pub(crate) const AUTOSAVE_DELAY_MS: i32 = 1500;
 pub struct EditorState {
     pub path: RwSignal<Option<String>>,
     pub files: RwSignal<Vec<FileEntry>>,
+    /// Whether `files` is the result of a *finished* load of `path`.
+    ///
+    /// An empty tree means two very different things — "this folder has no notes
+    /// in it" and "we have not asked the backend yet" — and only the first one is
+    /// worth saying out loud. `path` is set before the walk that fills `files`
+    /// comes back, so without this the sidebar would announce an empty folder
+    /// every time a folder is opened and then take it back a moment later.
+    pub tree_loaded: RwSignal<bool>,
     pub selected_file: RwSignal<Option<String>>,
     pub content: RwSignal<String>,
     /// Last content known to be on disk. Autosave compares against this so a
@@ -72,6 +80,7 @@ impl EditorState {
         Self {
             path: RwSignal::new(None),
             files: RwSignal::new(Vec::new()),
+            tree_loaded: RwSignal::new(false),
             selected_file: RwSignal::new(None),
             content: RwSignal::new(String::new()),
             last_saved: RwSignal::new(String::new()),

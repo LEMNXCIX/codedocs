@@ -56,12 +56,16 @@ pub fn Layout() -> impl IntoView {
 
     crate::shortcuts::install(state, on_save);
 
+    // Creating a file needs a folder to put it in, and asking for one is the
+    // same prompt as "save a document that has no file yet" — so both go
+    // through `ensure_workspace` instead of each deciding for itself.
     let on_create = Callback::new(move |_: ()| {
-        if let Some(folder) = state.path.get_untracked() {
+        spawn_local(async move {
+            let Some(folder) = actions::ensure_workspace(state).await else {
+                return;
+            };
             actions::create_file(state, folder);
-        } else {
-            state.notify("Abrí una carpeta antes de crear un archivo");
-        }
+        });
     });
 
     view! {

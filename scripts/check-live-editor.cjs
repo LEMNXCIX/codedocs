@@ -658,6 +658,124 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const expectedAccented = await page.evaluate(() => window.__codedocs_getContent().indexOf("## Segundo"));
   check("con acentos el cursor cae en el encabezado", cursorAccented === expectedAccented, `cursor=${cursorAccented} esperado=${expectedAccented}`);
 
+  // === Task 9: listas visibles, código delimitado, regla y footnotes ===
+  //
+  // Cada caso mira el DOM de verdad: con la viñeta oculta, el fondo ausente
+  // o la clase sin aplicar, el selector no aparece y el caso falla.
+
+  // Case: la viñeta se ve (no oculta) y el anidamiento se nota.
+  const markerText = (n) => page.evaluate((idx) => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[idx - 1];
+    const m = el ? el.querySelector(".cm-lp-listmarker") : null;
+    return m ? m.textContent : null;
+  }, n);
+  const markerLeft = (n) => page.evaluate((idx) => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[idx - 1];
+    const m = el ? el.querySelector(".cm-lp-listmarker") : null;
+    if (!m) return -1;
+    const r = document.createRange();
+    r.selectNodeContents(m);
+    const rect = [...r.getClientRects()][0];
+    return rect ? rect.left : -1;
+  }, n);
+  await setContent("- uno\n  - anidada\ncola");
+  await page.keyboard.press("Control+End"); // cursor a "cola": líneas 1-2 formateadas
+  await page.waitForTimeout(500);
+  check("lista: la viñeta lleva `.cm-lp-listmarker`", (await markerText(1)) === "- ", JSON.stringify(await markerText(1)));
+  check("lista: sin ocultos en el ítem", (await hiddenInLine(1)) === 0, `hidden=${await hiddenInLine(1)}`);
+  const ml1 = await markerLeft(1);
+  const ml2 = await markerLeft(2);
+  check("lista: la anidada se ve más adentro", ml1 >= 0 && ml2 > ml1, `l1=${ml1} l2=${ml2}`);
+
+  // Case: cursor en el ítem — la línea muestra su fuente cruda (`- uno`),
+  // distinguible de la viñeta estilada: sin cursor no hay `.cm-lp-listmarker`.
+  await page.keyboard.press("Control+Home"); // cursor a la línea 1: se revela
+  await page.waitForTimeout(400);
+  const revealedMarker = await page.evaluate(() => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[0];
+    return el ? el.querySelectorAll(".cm-lp-listmarker").length : -1;
+  });
+  const revealedItem = await page.evaluate(() => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[0];
+    return el ? el.textContent : null;
+  });
+  check("lista: cursor en el ítem muestra `- uno` crudo", revealedMarker === 0 && revealedItem === "- uno", `markers=${revealedMarker} texto=${JSON.stringify(revealedItem)}`);
+
+  // Case: `*` y `+` conservan su carácter del fuente, sin normalizar.
+  await setContent("* uno\n+ dos\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const star = await markerText(1);
+  const plus = await markerText(2);
+  check("lista: `*` y `+` conservan su carácter", star === "* " && plus === "+ ", JSON.stringify([star, plus]));
+
+  // Case: la lista numerada muestra el número del fuente, no un contador.
+  await setContent("1. uno\n2. dos\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const num1 = await markerText(1);
+  const num2 = await markerText(2);
+  check("numerada: se ve el número del fuente", num1 === "1. " && num2 === "2. ", JSON.stringify([num1, num2]));
+
+  // Case: `- [ ] tarea` — espacios alrededor del checkbox intactos.
+  await setContent("- [ ] tarea\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  check("tarea: sin ocultos alrededor del checkbox", (await hiddenInLine(1)) === 0, `hidden=${await hiddenInLine(1)}`);
+  const taskLine = await page.evaluate(() => {
+    const el = document.querySelectorAll(".cm-editor .cm-line")[0];
+    return el ? el.textContent : null;
+  });
+  check("tarea: el texto no queda pegado", taskLine === "- [ ] tarea", JSON.stringify(taskLine));
+
+  // Case: bloque cercado — vallas ocultas, cuerpo sombreado.
+  await setContent("```rust\ncode\n```\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const codeBody = await page.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-codeblock");
+    if (!el) return null;
+    return { text: el.textContent, bg: getComputedStyle(el).backgroundColor };
+  });
+  check(
+    "código cercado: el cuerpo lleva `.cm-lp-codeblock` con fondo",
+    !!codeBody && codeBody.text === "code" && codeBody.bg !== "rgba(0, 0, 0, 0)",
+    JSON.stringify(codeBody),
+  );
+  check("código cercado: las vallas siguen ocultas", (await hiddenInLine(1)) >= 1, `hidden=${await hiddenInLine(1)}`);
+
+  // Case: bloque indentado con 4 espacios — cuerpo sombreado también.
+  await setContent("para\n\n    code\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const indBody = await page.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-codeblock");
+    if (!el) return null;
+    return { text: el.textContent, bg: getComputedStyle(el).backgroundColor };
+  });
+  check(
+    "código indentado: el cuerpo lleva `.cm-lp-codeblock` con fondo",
+    !!indBody && indBody.text.includes("code") && indBody.bg !== "rgba(0, 0, 0, 0)",
+    JSON.stringify(indBody),
+  );
+
+  // Case: `---` se ve como una línea, no como tres guiones.
+  await setContent("a\n\n---\n\nb");
+  await page.keyboard.press("Control+End"); // cursor en "b": la regla formateada
+  await page.waitForTimeout(500);
+  check("regla: la línea lleva `.cm-lp-hr`", await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-hr")));
+
+  // Case: footnotes — referencia y definición se distinguen.
+  await setContent("texto[^1]\n\n[^1]: pie\ncola");
+  await page.keyboard.press("Control+End");
+  await page.waitForTimeout(500);
+  const fnRef = await page.evaluate(() => {
+    const el = document.querySelector(".cm-editor .cm-lp-footnote-ref");
+    return el ? el.textContent : null;
+  });
+  check("footnote: la referencia se distingue", fnRef === "[^1]", JSON.stringify(fnRef));
+  check("footnote: la definición se lee como bloque", await page.evaluate(() => !!document.querySelector(".cm-editor .cm-lp-footnote-def")));
+
   for (const e of errors) {
     if (/reading 'then'|\.then.*undefined|panicked|assertion/i.test(e)) {
       problems.push("runtime error: " + e.split("\n")[0].slice(0, 160));

@@ -111,6 +111,14 @@ pub async fn open_project_folder() -> CommandResult<String> {
     invoke("open_project_folder", JsValue::NULL).await
 }
 
+/// Ask the backend where a document with no file yet should be written.
+///
+/// Takes no arguments: the native save dialog is configured entirely
+/// Rust-side (markdown filter, `untitled.md` as the starting name).
+pub async fn save_file_as() -> CommandResult<String> {
+    invoke("save_file_as", JsValue::NULL).await
+}
+
 pub async fn list_markdown_files(folder_path: &str) -> CommandResult<FileTree> {
     invoke(
         "list_markdown_files",
@@ -167,6 +175,23 @@ pub async fn create_file(folder_path: &str, name: &str) -> CommandResult<String>
         args([
             ("folderPath", folder_path.to_string()),
             ("name", name.to_string()),
+        ]),
+    )
+    .await
+}
+
+/// Ask the backend where the PDF should go and write it there.
+///
+/// `pathStr` is the note being exported — the backend compiles inside the note's
+/// folder, which is what makes a relative image in the note resolve — and it
+/// opens its own save dialog, the way `save_file_as` does. Returns the path it
+/// wrote.
+pub async fn export_pdf(path: &str, content: &str) -> CommandResult<String> {
+    invoke(
+        "export_pdf",
+        args([
+            ("pathStr", path.to_string()),
+            ("content", content.to_string()),
         ]),
     )
     .await

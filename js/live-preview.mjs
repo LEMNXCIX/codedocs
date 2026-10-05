@@ -56,6 +56,10 @@ const TAG_TABLE_DELIMITER = 17;
 const TAG_MATH_INLINE = 18;
 const TAG_MATH_DISPLAY = 19;
 const TAG_MERMAID = 20;
+const TAG_CODE_BODY = 21;
+const TAG_HR = 22;
+const TAG_FOOTNOTE_REF = 23;
+const TAG_FOOTNOTE_DEF = 24;
 
 /**
  * Block-level widget tags (math display, mermaid). A line covered by
@@ -76,6 +80,8 @@ export const livePreviewRefresh = StateEffect.define();
 function lineClass(tag) {
   if (tag >= TAG_HEADING_1 && tag <= TAG_HEADING_6) return `cm-lp-h${tag - TAG_HEADING_1 + 1}`;
   if (tag === TAG_QUOTE) return "cm-lp-quote";
+  if (tag === TAG_HR) return "cm-lp-hr";
+  if (tag === TAG_FOOTNOTE_DEF) return "cm-lp-footnote-def";
   return null;
 }
 
@@ -89,6 +95,9 @@ const DECO_EMPHASIS = Decoration.mark({ class: "cm-lp-emphasis" });
 const DECO_STRIKETHROUGH = Decoration.mark({ class: "cm-lp-strikethrough" });
 const DECO_INLINE_CODE = Decoration.mark({ class: "cm-lp-inlinecode" });
 const DECO_LINK = Decoration.mark({ class: "cm-lp-link" });
+const DECO_LIST_MARKER = Decoration.mark({ class: "cm-lp-listmarker" });
+const DECO_CODE_BODY = Decoration.mark({ class: "cm-lp-codeblock" });
+const DECO_FOOTNOTE_REF = Decoration.mark({ class: "cm-lp-footnote-ref" });
 const DECO_LINE = {
   "cm-lp-h1": Decoration.line({ class: "cm-lp-h1" }),
   "cm-lp-h2": Decoration.line({ class: "cm-lp-h2" }),
@@ -97,6 +106,8 @@ const DECO_LINE = {
   "cm-lp-h5": Decoration.line({ class: "cm-lp-h5" }),
   "cm-lp-h6": Decoration.line({ class: "cm-lp-h6" }),
   "cm-lp-quote": Decoration.line({ class: "cm-lp-quote" }),
+  "cm-lp-hr": Decoration.line({ class: "cm-lp-hr" }),
+  "cm-lp-footnote-def": Decoration.line({ class: "cm-lp-footnote-def" }),
 };
 const DECO_TABLE_ROW = Decoration.line({ class: "cm-lp-table-row" });
 
@@ -283,11 +294,15 @@ function imageTarget(doc, from, to) {
 function decorationFor(tag) {
   switch (tag) {
     case TAG_HIDE:
-    case TAG_LIST_MARKER:
     case TAG_FENCE:
     case TAG_TABLE_PIPE:
     case TAG_TABLE_DELIMITER:
       return { kind: "hide", deco: DECO_HIDDEN };
+    case TAG_LIST_MARKER:
+      // The bullet is the only signal the line is a list: styled
+      // (muted), never hidden. Never `replace`: the source character
+      // (`-`, `*`, `1.`) is what the user sees and edits.
+      return { kind: "mark", deco: DECO_LIST_MARKER };
     case TAG_STRONG:
       return { kind: "mark", deco: DECO_STRONG };
     case TAG_EMPHASIS:
@@ -298,6 +313,10 @@ function decorationFor(tag) {
       return { kind: "mark", deco: DECO_INLINE_CODE };
     case TAG_LINK_TEXT:
       return { kind: "mark", deco: DECO_LINK };
+    case TAG_CODE_BODY:
+      return { kind: "mark", deco: DECO_CODE_BODY };
+    case TAG_FOOTNOTE_REF:
+      return { kind: "mark", deco: DECO_FOOTNOTE_REF };
     default: {
       const cls = lineClass(tag);
       if (cls) return { kind: "line", deco: DECO_LINE[cls] };

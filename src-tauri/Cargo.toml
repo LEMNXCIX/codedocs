@@ -23,3 +23,14 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 notify = { version = "7", features = ["macos_kqueue"] }
+# PDF export. `reqwest` only to fetch the Typst CLI; `sha2` to check what came
+# off the network before running it; `tar` + `lzma-rs` + `zip` to unpack the
+# release asset on unix and windows respectively. All pure Rust: no liblzma, no
+# libssl at build time beyond what the platform already needs.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
+sha2 = "0.10"
+tar = "0.4"
+lzma-rs = "0.3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# `export_pdf` awaits the compiler download, so the async test needs a runtime.
+tokio = { version = "1", features = ["macros", "rt"] }
