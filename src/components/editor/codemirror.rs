@@ -213,6 +213,7 @@ pub enum EditorCommand {
     Focus,
     ToggleSource,
     NewFile,
+    ExportPdf,
 }
 
 impl EditorCommand {
@@ -234,6 +235,13 @@ impl EditorCommand {
                     crate::actions::create_file(state, folder);
                 }
             }),
+            // Bound here and nowhere else. `Mod-p` is deliberately *not* in the
+            // CodeMirror keymap below: `Mod-s` is bound in both places, and one
+            // Ctrl+S reaches the save path twice — which is why `save_now` needs
+            // a re-entrancy guard. A command with a native dialog and a
+            // subprocess behind it must not inherit that, and
+            // `scripts/check-export-pdf.cjs` counts the invocations to prove it.
+            Self::ExportPdf => crate::actions::export_pdf(state),
         }
     }
 }
@@ -254,5 +262,6 @@ pub fn shortcut_for(command: EditorCommand) -> Option<(bool, &'static str)> {
         EditorCommand::Focus => (true, "shift+f"),
         EditorCommand::ToggleSource => (true, "/"),
         EditorCommand::NewFile => (true, "n"),
+        EditorCommand::ExportPdf => (true, "p"),
     })
 }

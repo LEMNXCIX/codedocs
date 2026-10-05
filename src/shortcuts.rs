@@ -47,6 +47,7 @@ const SHORTCUTS: &[EditorCommand] = &[
     EditorCommand::Focus,
     EditorCommand::ToggleSource,
     EditorCommand::NewFile,
+    EditorCommand::ExportPdf,
 ];
 
 /// Match a key spec like `"b"` or `"shift+s"` against the event.
@@ -102,5 +103,15 @@ mod tests {
     #[test]
     fn source_toggle_is_bound_to_ctrl_slash() {
         assert_eq!(shortcut_for(EditorCommand::ToggleSource), Some((true, "/")));
+    }
+
+    #[test]
+    fn the_export_is_bound_to_ctrl_p() {
+        // One binding, in this table. `Mod-s` is bound *twice* — here and in
+        // the CodeMirror keymap — and that is why `save_now` needs a re-entrancy
+        // guard; the table's uniqueness test cannot see the second binding
+        // because it lives in JavaScript. `scripts/check-export-pdf.cjs` drives
+        // the real key and counts the invocations.
+        assert_eq!(shortcut_for(EditorCommand::ExportPdf), Some((true, "p")));
     }
 }

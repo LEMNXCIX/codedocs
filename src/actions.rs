@@ -513,6 +513,31 @@ fn rename_in_tree(entries: &[FileEntry], old_path: &str, new_name: &str) -> Opti
     None
 }
 
+/// Export the open document as a PDF.
+///
+/// Needs a file: the backend compiles inside the note's own folder, so that a
+/// relative image in the note resolves, and there is no folder for a document
+/// that has never been saved. `ensure_workspace` is not called for it — asking
+/// for a folder to *export* would be a surprise; a document with no file has
+/// nothing to export yet, and `Ctrl+S` is the answer to that.
+///
+/// A dismiss of the save dialog is not an error worth a toast, for the same
+/// reason it is not one for `save_file_as`: the backend reports it with the
+/// fixed wording [`is_cancelled`] matches on.
+pub fn export_pdf(state: EditorState) {
+    spawn_local(async move {
+        let Some(path) = state.selected_file.get_untracked() else {
+            state.notify("Guardá el documento antes de exportarlo a PDF");
+            return;
+        };
+        let content = state.content.get_untracked();
+        match tauri_bridge::export_pdf(&path, &content).await {
+            Ok(written) => state.notify(format!("PDF guardado en {written}")),
+            Err(err) => report_picker_failure(&state, "exportar a PDF", &err),
+        }
+    });
+}
+
 /// Clear the editor buffer without touching the file on disk.
 pub fn clear_editor(state: EditorState) {
     state.content.set(String::new());

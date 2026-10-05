@@ -27,10 +27,11 @@
     "check:preview": "node scripts/check-preview-render.cjs",
     "check:live": "node scripts/check-live-editor.cjs",
     "check:big": "node scripts/check-large-folder.cjs",
-    "verify:browser": "npm run build && npm run check:glue && npm run check:csp && npm run check:ipc && npm run check:preview && npm run check:live && npm run check:rename && npm run check:big",
+    "verify:browser": "npm run build && npm run check:glue && npm run check:csp && npm run check:ipc && npm run check:preview && npm run check:live && npm run check:rename && npm run check:pdf && npm run check:big",
     "check:glue": "node scripts/check-tauri-glue.mjs",
     "check:ipc": "node scripts/check-ipc-flow.cjs",
-    "check:rename": "node scripts/check-rename-modal.cjs"
+    "check:rename": "node scripts/check-rename-modal.cjs",
+    "check:pdf": "node scripts/check-export-pdf.cjs"
   },
   "repository": {
     "type": "git",

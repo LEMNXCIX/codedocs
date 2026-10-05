@@ -1,8 +1,9 @@
 use leptos::prelude::*;
 
 use crate::state::EditorState;
+use crate::utils::env::is_tauri;
 
-/// Filename, dirty indicator and save-state dot.
+/// Filename, dirty indicator, export button and save-state dot.
 #[component]
 pub fn EditorHeader(state: EditorState) -> impl IntoView {
     view! {
@@ -14,8 +15,49 @@ pub fn EditorHeader(state: EditorState) -> impl IntoView {
                     None => "Sin archivo seleccionado".to_string(),
                 }}
             </span>
-            <Dot state />
+            <div class="flex items-center gap-3 shrink-0">
+                <ExportPdfButton state />
+                <Dot state />
+            </div>
         </header>
+    }
+}
+
+/// "Exportar PDF", the visible half of `Ctrl+P`.
+///
+/// Rendered in the browser demo too, and disabled there: the export needs a
+/// native dialog and a compiler, neither of which the web build has. Hiding it
+/// instead would make the feature look absent, and the disabled button says
+/// exactly why nothing happens.
+///
+/// Disabled with no file open for the backend's reason: the note's folder is
+/// the compiler's root, and a document that has never been saved has none.
+#[component]
+fn ExportPdfButton(state: EditorState) -> impl IntoView {
+    let on_click = move |_: leptos::ev::MouseEvent| crate::actions::export_pdf(state);
+
+    view! {
+        <button
+            type="button"
+            class="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium \
+                   text-base-500 dark:text-base-400 hover:text-base-800 dark:hover:text-base-200 \
+                   hover:bg-base-200 dark:hover:bg-base-800 transition-colors \
+                   disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent \
+                   disabled:hover:text-base-500 dark:disabled:hover:text-base-400"
+            title="Exportar a PDF (Ctrl+P)"
+            aria-label="Exportar a PDF"
+            disabled=move || !is_tauri() || state.selected_file.get().is_none()
+            on:click=on_click
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="flex-shrink-0">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            "PDF"
+        </button>
     }
 }
 

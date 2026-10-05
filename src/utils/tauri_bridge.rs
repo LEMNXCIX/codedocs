@@ -180,6 +180,23 @@ pub async fn create_file(folder_path: &str, name: &str) -> CommandResult<String>
     .await
 }
 
+/// Ask the backend where the PDF should go and write it there.
+///
+/// `pathStr` is the note being exported — the backend compiles inside the note's
+/// folder, which is what makes a relative image in the note resolve — and it
+/// opens its own save dialog, the way `save_file_as` does. Returns the path it
+/// wrote.
+pub async fn export_pdf(path: &str, content: &str) -> CommandResult<String> {
+    invoke(
+        "export_pdf",
+        args([
+            ("pathStr", path.to_string()),
+            ("content", content.to_string()),
+        ]),
+    )
+    .await
+}
+
 pub async fn stop_watching() -> CommandResult<()> {
     invoke("stop_watching", JsValue::NULL).await
 }

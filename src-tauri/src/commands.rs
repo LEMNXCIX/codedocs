@@ -63,6 +63,51 @@ pub async fn save_file_as(app: AppHandle) -> Result<String, String> {
     }
 }
 
+/// Ask where the PDF should go, export the open document there, and return the
+/// path written.
+///
+/// `async` for the same reason as [`save_file_as`]: a synchronous command runs
+/// on the main thread, where the native picker would freeze the webview for as
+/// long as it stays open. The cancellation wording is that command's, verbatim:
+/// the frontend matches those words to tell a dismissed dialog from a failure,
+/// so it must not be reworded.
+///
+/// The destination is deliberately *not* resolved against the workspace: the
+/// user pointed a save dialog at it, and a PDF in their Downloads folder is the
+/// point of the feature. The note, on the other hand, goes through the guard
+/// like every other file this app touches. See `export::export_to_pdf`.
+#[tauri::command]
+pub async fn export_pdf(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path_str: String,
+    content: String,
+) -> Result<String, String> {
+    let workspace = state.current_workspace()?;
+    let note = workspace
+        .resolve_file(&path_str)
+        .map_err(|e| e.to_string())?;
+
+    let chosen = app
+        .dialog()
+        .file()
+        .add_filter("PDF", &["pdf"])
+        .set_file_name(crate::export::suggested_name(&note))
+        .blocking_save_file()
+        .ok_or_else(|| "Usuario cancelo la accion".to_string())?;
+    let destination = chosen
+        .into_path()
+        .map_err(|_| "Esa ubicacion no se puede usar".to_string())?;
+
+    crate::export::export_to_pdf(
+        &workspace,
+        &path_str,
+        &content,
+        destination.to_string_lossy().as_ref(),
+    )
+    .await
+}
+
 /// Walk `folder_path` and return its markdown tree, opening it as the workspace
 /// if it is not open yet.
 ///

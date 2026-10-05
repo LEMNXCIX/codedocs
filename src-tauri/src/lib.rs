@@ -1,9 +1,11 @@
 mod commands;
+mod export;
+mod pdf;
 mod state;
 
 use crate::commands::{
-    create_file, delete_file, list_markdown_files, open_project_folder, read_file, rename_file,
-    save_file, save_file_as, stop_watching, watch_folder,
+    create_file, delete_file, export_pdf, list_markdown_files, open_project_folder, read_file,
+    rename_file, save_file, save_file_as, stop_watching, watch_folder,
 };
 use crate::state::AppState;
 
@@ -24,6 +26,7 @@ pub fn run() {
             create_file,
             watch_folder,
             stop_watching,
+            export_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -22,7 +22,9 @@ pub mod path_guard;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod tree;
 
-pub use markdown::{extract_headings, live_spans, render_markdown, Heading, LiveSpans, SpanTag};
+pub use markdown::{
+    extract_headings, live_spans, markdown_to_typst, render_markdown, Heading, LiveSpans, SpanTag,
+};
 pub use types::FileEntry;
 
 #[cfg(not(target_arch = "wasm32"))]
