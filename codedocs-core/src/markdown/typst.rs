@@ -20,8 +20,37 @@
 //! and one mistake there is not a rendering bug: Typst source can read files
 //! (`#read`), so a breakout would be a sandbox escape rather than a typo. Code
 //! spans and blocks are emitted as backtick *fences* instead, where the content
-//! is literal by construction. The only strings in the output are URLs, which
-//! go through the same scheme check the HTML renderer uses.
+//! is literal by construction.
+//!
+//! The only strings in the output are the destinations of links and images. A
+//! link's goes through the same scheme check the HTML renderer uses; an image's
+//! is a *path*, and a path that resolved to a file inside the note's own folder
+//! is the narrowest thing it can be — see below.
+//!
+//! # The second chokepoint: an image path is a path, not text
+//!
+//! Everything above is about *what the document says*. An image destination is
+//! also a path the compiler will open, and Typst is a filesystem reader: it
+//! resolves one against the source file and reads whatever it lands on. Two
+//! things follow, and neither is a rendering bug.
+//!
+//! * **A path that does not resolve fails the whole document.** Typst has no
+//!   try/catch: one `#image` to a file that is not there is a compile error with
+//!   a line number and *no PDF*. A note with a stale image link could not be
+//!   exported at all, and what the user was told was that exporting did not
+//!   work.
+//! * **A path that resolves can name anything.** `![](/etc/passwd)` in a note
+//!   that gets shared puts a file from the disk into the PDF. Typst's own
+//!   `--root` refuses a `..` that escapes it and reinterprets an absolute path
+//!   as relative to it, but it *follows a symlink* that sits inside the root to
+//!   whatever that link points at — measured against the 0.15.1 CLI, not
+//!   assumed. CodeDocs opens folders the user did not write, so a note is
+//!   untrusted input about its own files.
+//!
+//! So [`markdown_to_typst`] is given the note's folder and resolves every image
+//! against it *before* the reference is emitted. See [`image_argument`] for the
+//! two questions and why they are asked where the source is generated rather
+//! than in the subprocess, where the only available answer is the error message.
 //!
 //! # What Typst actually accepts
 //!
@@ -36,6 +65,7 @@
 //!   [`checkbox`]; passing `- [ ]` through emits those characters literally.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use pulldown_cmark::{CowStr, Event, Parser, Tag, TagEnd};
 
@@ -61,13 +91,32 @@ const PREAMBLE: &str = "\
 /// The result is a complete `.typ` document: [`PREAMBLE`] plus the body.
 /// Compiling it is the caller's job (the `export_pdf` command), which keeps
 /// this function pure and testable without a Typst binary around.
-pub fn markdown_to_typst(content: &str) -> String {
+///
+/// # `note_folder` is not an optional extra
+///
+/// It is the folder the note itself lives in, and it is what every image
+/// reference in the document is resolved against — and refused with. Typst can
+/// read any file the process can reach, and it resolves a link *inside* the root
+/// to whatever that link points at, so a note that names its own images is a
+/// note that can name any file on the disk and have it read into a PDF the user
+/// then shares. The same is true of an image that does not exist: Typst has no
+/// way to catch a failed read, so one unresolvable `#image` fails the whole
+/// compilation and no PDF comes out at all.
+///
+/// So the check happens here, where the `.typ` is generated, and there is
+/// nothing to forget: a caller cannot produce this output without saying where
+/// the note is, and a path that does not resolve to a file inside that folder
+/// becomes a marker that names it instead of a reference the compiler would choke
+/// on. A folder that cannot be resolved at all — the answer on a platform with
+/// no filesystem to ask, which is the wasm frontend — takes the same
+/// fail-closed road: every image is a marker.
+pub fn markdown_to_typst(content: &str, note_folder: &Path) -> String {
     let events: Vec<Event<'_>> = Parser::new_ext(content, parser_options()).collect();
     // Two passes over the parsed events. The first renders the footnote
     // definitions, because in markdown a *reference* almost always comes first
     // — `#footnote[…]` is emitted at the reference site, so the body has to be
     // known before the body that refers to it starts.
-    let footnotes = collect_footnotes(&events);
+    let footnotes = collect_footnotes(&events, note_folder);
     let mut writer = Writer {
         link_stack: Vec::new(),
         suppress_image_text: 0,
@@ -75,6 +124,11 @@ pub fn markdown_to_typst(content: &str) -> String {
         in_footnote: false,
         depth: 0,
         quote_depth: 0,
+        // Resolved once: the containment check below compares canonical paths,
+        // and doing it per image would be a syscall per image for nothing. A
+        // folder that cannot be canonicalised stays `None`, which is the
+        // fail-closed answer rather than "no check".
+        note_folder: note_folder.canonicalize().ok(),
     };
     let mut body = String::new();
     writer.blocks(&events, &mut body);
@@ -252,6 +306,97 @@ fn image_path(dest: &str) -> String {
     dest.replace('\\', "/")
 }
 
+/// Why an image reference did not become an `#image`.
+///
+/// Ordered the way the questions are asked, so the marker names the first thing
+/// that is wrong rather than a downstream symptom of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MissingImage {
+    /// No such file, or the path could not be resolved at all.
+    NotFound,
+    /// It resolves to somewhere outside the note's own folder.
+    Outside,
+    /// It resolves, inside the folder, and it is a folder.
+    NotAFile,
+    /// The note's folder could not be resolved, so no path can be checked
+    /// against anything.
+    NoNoteFolder,
+}
+
+impl MissingImage {
+    /// What the reader is told in the PDF, in place of the picture.
+    fn reason(self) -> &'static str {
+        match self {
+            MissingImage::NotFound => "imagen que no existe",
+            MissingImage::Outside => "imagen fuera de la carpeta de la nota",
+            MissingImage::NotAFile => "la ruta no es un archivo",
+            MissingImage::NoNoteFolder => "imagen sin carpeta de la nota donde buscarla",
+        }
+    }
+}
+
+/// The `#image` argument for `dest`, or the reason there is not one.
+///
+/// Two questions, both asked here rather than left to the compiler, because the
+/// compiler cannot answer either one usefully:
+///
+/// 1. **Does it resolve?** A path that does not is an error, and Typst has no
+///    try/catch — one unresolvable `#image` fails the whole compilation and the
+///    user gets no PDF and no idea what was wrong with the note.
+/// 2. **Does it land inside the note's folder?** Typst reads any file the
+///    process can, and it follows a link that sits inside its root to the link's
+///    target, so without this a note can name a path that reads a file from
+///    anywhere on the disk into a document the user shares. CodeDocs opens
+///    folders the user did not write, which is what makes a note's own image
+///    paths untrusted input.
+///
+/// The spelling checked is the spelling emitted. Canonicalising one string and
+/// writing another is how a check and a compiler end up disagreeing about where
+/// a file is — and the emitted path stays the document's own, because the
+/// generated source sits in the note's folder and Typst resolves relative to the
+/// source.
+fn image_argument(dest: &str, note_folder: Option<&Path>) -> Result<String, MissingImage> {
+    let base = note_folder.ok_or(MissingImage::NoNoteFolder)?;
+    let spelling = image_path(dest);
+    // `canonicalize` resolves `..` *and* symlinks before the containment test,
+    // so neither can be what carries a path out of the folder. It fails for
+    // anything that is not there to resolve, which is the same answer: there is
+    // no file, so there is nothing to reference.
+    let resolved = base
+        .join(&spelling)
+        .canonicalize()
+        .map_err(|_| MissingImage::NotFound)?;
+    if !resolved.starts_with(base) {
+        return Err(MissingImage::Outside);
+    }
+    // A directory resolves, is inside the folder, and is still not an image the
+    // compiler can read — the same no-PDF failure, one check later.
+    if !resolved.is_file() {
+        return Err(MissingImage::NotAFile);
+    }
+    Ok(quote_string(&spelling))
+}
+
+/// Whether an image destination names something on this disk.
+///
+/// Everything else is dropped before a path is built out of it: a scheme or a
+/// `//host` is a URL, and the compiler has no network to fetch it with.
+fn is_local_image(dest: &str) -> bool {
+    is_safe_url(dest) && !dest.contains("://") && !dest.starts_with("data:")
+}
+
+/// An image that cannot be included, as something visible on the page.
+///
+/// The export has to come out even when a file is missing, and a picture that
+/// quietly leaves a hole is the failure this whole check is not: the reader has
+/// to be able to tell that something was there. The path is document text and
+/// goes through [`escape_text`] like every other character from the document —
+/// the marker puts it inside a Typst content block, and an unescaped `]` would
+/// end the block early and the rest of the path would become markup.
+fn missing_image(dest: &str, why: MissingImage) -> String {
+    format!("#emph[{}: {}]", why.reason(), escape_text(dest))
+}
+
 /// Renders an event stream into Typst markup.
 struct Writer {
     /// One entry per open link: whether its destination was safe to emit. A
@@ -271,6 +416,11 @@ struct Writer {
     /// How many block quotes deep the current block sits, which sets how far a
     /// quote's left bar is indented.
     quote_depth: usize,
+    /// The note's own folder, canonicalised, and the boundary every image path
+    /// is checked against. `None` when it could not be resolved: every image is
+    /// then a marker, which is the answer a platform with no filesystem — the
+    /// wasm frontend — has to give as well.
+    note_folder: Option<PathBuf>,
 }
 
 impl Writer {
@@ -598,21 +748,7 @@ impl Writer {
                     out.push(']');
                 }
             }
-            Event::Start(Tag::Image { dest_url, .. }) => {
-                // A remote image cannot work: the compiler has no network and a
-                // `data:` URL is not an image to it either. The alt text is the
-                // useful part of a broken image anyway, so it is left in place.
-                let local = is_safe_url(dest_url)
-                    && !dest_url.contains("://")
-                    && !dest_url.starts_with("data:");
-                if local {
-                    out.push_str(&format!(
-                        "#image({})",
-                        quote_string(&image_path(dest_url.as_ref()))
-                    ));
-                    self.suppress_image_text += 1;
-                }
-            }
+            Event::Start(Tag::Image { dest_url, .. }) => self.image(dest_url.as_ref(), out),
             Event::End(TagEnd::Image) => {
                 if self.suppress_image_text > 0 {
                     self.suppress_image_text -= 1;
@@ -657,6 +793,29 @@ impl Writer {
             // same event would never terminate.
             _ => {}
         }
+    }
+
+    /// One image reference: the `#image` call, or the marker that replaces it.
+    fn image(&mut self, dest: &str, out: &mut String) {
+        // A remote image cannot work: the compiler has no network and a `data:`
+        // URL is not an image to it either. Nothing is emitted for it and the
+        // alt text is left in place — the useful part of a picture that cannot
+        // be shown.
+        if !is_local_image(dest) {
+            return;
+        }
+        match image_argument(dest, self.note_folder.as_deref()) {
+            Ok(argument) => {
+                out.push_str("#image(");
+                out.push_str(&argument);
+                out.push(')');
+            }
+            Err(why) => out.push_str(&missing_image(dest, why)),
+        }
+        // Either way the alt text has done its job: as the image's content, or
+        // as something the marker already names. Printing it as well would put
+        // the same information in the page twice.
+        self.suppress_image_text += 1;
     }
 
     /// Document text, with math expanded by the shared splitter.
@@ -792,7 +951,7 @@ fn take_item<'a>(events: &'a [Event<'a>]) -> (Vec<Event<'a>>, usize) {
 ///
 /// Separated from the main pass because a reference precedes its definition in
 /// ordinary markdown, and the reference is where `#footnote` has to be emitted.
-fn collect_footnotes(events: &[Event<'_>]) -> HashMap<String, String> {
+fn collect_footnotes(events: &[Event<'_>], note_folder: &Path) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let mut index = 0;
     while index < events.len() {
@@ -810,6 +969,9 @@ fn collect_footnotes(events: &[Event<'_>]) -> HashMap<String, String> {
             in_footnote: false,
             depth: 0,
             quote_depth: 0,
+            // The same folder as the body, so an image inside a footnote is
+            // checked exactly like one outside it.
+            note_folder: note_folder.canonicalize().ok(),
         };
         let mut body = String::new();
         writer.blocks(&inner, &mut body);
@@ -828,10 +990,81 @@ fn parse(text: &str) -> Vec<Event<'_>> {
 mod tests {
     use super::*;
 
+    /// A note folder on disk, deleted when the test ends.
+    ///
+    /// Real directories, never a mock: what is being decided is a question about
+    /// the filesystem — whether a path resolves, and *where* it lands — and a
+    /// mock of `exists` cannot answer the second one.
+    ///
+    /// The note lives in a `notas` subfolder of the scratch directory, so a test
+    /// can plant something a `..` actually reaches.
+    struct Note {
+        root: PathBuf,
+        folder: PathBuf,
+    }
+
+    impl Note {
+        fn new(tag: &str) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "codedocs-typst-{tag}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            let folder = root.join("notas");
+            std::fs::create_dir_all(&folder).expect("create the note's folder");
+            // Canonicalised: the containment check compares canonical paths, and
+            // a scratch folder behind a symlink (`/tmp` on macOS) would
+            // otherwise never compare equal to itself.
+            Note {
+                root: root.canonicalize().expect("canonicalize the scratch dir"),
+                folder: folder
+                    .canonicalize()
+                    .expect("canonicalize the note's folder"),
+            }
+        }
+
+        fn folder(&self) -> &Path {
+            &self.folder
+        }
+
+        /// Write a file inside the note's folder, folders included.
+        fn write(&self, relative: &str, body: &str) -> &Self {
+            let path = self.folder.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).expect("create the parent");
+            std::fs::write(&path, body).expect("write the fixture");
+            self
+        }
+
+        /// Write a file *outside* the note's folder, and return its path.
+        fn plant(&self, relative: &str, body: &str) -> PathBuf {
+            let path = self.root.join(relative);
+            std::fs::write(&path, body).expect("plant the file");
+            path
+        }
+    }
+
+    impl Drop for Note {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
     /// The body without the preamble, so the assertions read as assertions
     /// about the document rather than about the page setup.
+    ///
+    /// The note's folder is a real, empty one: image paths are resolved against
+    /// it, so a path with nothing behind it resolves to nothing. That is the
+    /// right folder for a markdown with no images, and the tests that do have
+    /// one go through [`body_in`] with the file actually there.
     fn body(markdown: &str) -> String {
-        let typst = markdown_to_typst(markdown);
+        let note = Note::new("body");
+        body_in(markdown, note.folder())
+    }
+
+    /// The body, for a note that lives in `folder`.
+    fn body_in(markdown: &str, folder: &Path) -> String {
+        let typst = markdown_to_typst(markdown, folder);
         let start = typst
             .find("\n\n")
             .expect("the preamble ends with a blank line")
@@ -840,12 +1073,14 @@ mod tests {
     }
 
     fn full(markdown: &str) -> String {
-        markdown_to_typst(markdown)
+        let note = Note::new("full");
+        markdown_to_typst(markdown, note.folder())
     }
 
     #[test]
     fn preamble_sets_the_page_up() {
-        let typst = markdown_to_typst("# hola\n");
+        let note = Note::new("preamble");
+        let typst = markdown_to_typst("# hola\n", note.folder());
         assert!(
             typst.contains(r#"#set page(paper: "a4", margin: 2.5cm)"#),
             "{typst}"
@@ -1153,7 +1388,9 @@ mod tests {
 
     #[test]
     fn a_link_around_an_image_closes_its_own_bracket() {
-        let typst = body("[![alt](./a.png)](https://ok.test)\n");
+        let note = Note::new("link-image");
+        note.write("a.png", "x");
+        let typst = body_in("[![alt](./a.png)](https://ok.test)\n", note.folder());
         assert_eq!(typst, r##"#link("https://ok.test")[#image("./a.png")]"##);
     }
 
@@ -1171,7 +1408,8 @@ mod tests {
         // Now the same thing with a real quote in the destination, which is the
         // character that can actually close a Typst literal. Without escaping it
         // the literal would end mid-URL and the rest would be compiled as code.
-        let quoted = markdown_to_typst("[x](<https://ok.test/\"+code+\">)\n");
+        let note = Note::new("url-quote");
+        let quoted = markdown_to_typst("[x](<https://ok.test/\"+code+\">)\n", note.folder());
         let expected = "#link(\"https://ok.test/\\\"+code+\\\"\")[x]";
         assert!(
             quoted.contains(expected),
@@ -1191,15 +1429,172 @@ mod tests {
 
     #[test]
     fn a_relative_image_becomes_an_image_element() {
-        assert_eq!(body("![pie](./img.png)\n"), r#"#image("./img.png")"#);
+        let note = Note::new("relative");
+        note.write("img.png", "x");
+        assert_eq!(
+            body_in("![pie](./img.png)\n", note.folder()),
+            r#"#image("./img.png")"#
+        );
     }
 
     #[test]
     fn a_windows_image_path_is_normalised() {
+        let note = Note::new("windows");
+        note.write("img/carpeta/foto.png", "x");
         assert_eq!(
-            body("![pie](img\\carpeta\\foto.png)\n"),
+            body_in("![pie](img\\carpeta\\foto.png)\n", note.folder()),
             r#"#image("img/carpeta/foto.png")"#
         );
+    }
+
+    // ---- Images: the path is resolved and checked before it reaches Typst ----
+    //
+    // Two questions, both about the filesystem, both answered where the `.typ`
+    // is generated: does the file exist, and does it land inside the note's own
+    // folder. Typst has no try/catch, so a reference it cannot resolve is not a
+    // missing picture — it is the whole document failing to compile.
+    //
+    // Every test here builds real files in a real folder. What is under test is
+    // a decision made about the filesystem, so a mock would be testing the mock.
+
+    #[test]
+    fn an_image_inside_the_note_folder_is_emitted() {
+        let note = Note::new("exists");
+        note.write("foto.png", "lo que tenga adentro da igual");
+        assert_eq!(
+            body_in("![pie](foto.png)\n", note.folder()),
+            r#"#image("foto.png")"#
+        );
+    }
+
+    #[test]
+    fn an_image_in_a_subfolder_of_the_note_folder_is_emitted() {
+        // A subfolder is *inside* the note's folder. This is the shape nearly
+        // every real notes tree uses — `img/diagrams/flujo.png` next to the
+        // note — and a check that rejected it would reject the feature.
+        let note = Note::new("subfolder");
+        note.write("img/diagrams/flujo.png", "x");
+        assert_eq!(
+            body_in("![pie](img/diagrams/flujo.png)\n", note.folder()),
+            r#"#image("img/diagrams/flujo.png")"#
+        );
+    }
+
+    #[test]
+    fn a_missing_image_becomes_a_marker_and_not_a_reference() {
+        // The failure being fixed. Emitting `#image("rota.png")` is a Typst
+        // error, and Typst has no way to catch one, so the export produced *no
+        // PDF at all* and the user was told exporting did not work.
+        let note = Note::new("missing");
+        let typst = body_in("![pie de foto](rota.png)\n", note.folder());
+        assert!(!typst.contains("#image"), "{typst}");
+        // The marker names the image and says why it is not there, so the reader
+        // knows something was in this spot.
+        assert!(typst.contains("rota.png"), "{typst}");
+        assert!(typst.contains("no existe"), "{typst}");
+        // And the alt text does not come out a second time beside it.
+        assert!(!typst.contains("pie de foto"), "{typst}");
+    }
+
+    #[test]
+    fn a_dotdot_that_leaves_the_note_folder_becomes_a_marker() {
+        let note = Note::new("dotdot");
+        let planted = note.plant("secreto.png", "clave: hunter2");
+        assert!(planted.exists(), "the fixture must be a real file");
+        let typst = body_in("![x](../secreto.png)\n", note.folder());
+        assert!(!typst.contains("#image"), "{typst}");
+        assert!(typst.contains("fuera de la carpeta"), "{typst}");
+    }
+
+    #[test]
+    fn an_absolute_path_outside_the_note_folder_becomes_a_marker() {
+        // The direction that is not optional: with the check off, a note could
+        // name any file on the disk and have it read into a PDF the user then
+        // shares. CodeDocs opens folders the user did not write, so a note is
+        // not to be trusted to name its own images.
+        let note = Note::new("absolute");
+        let secret = note.plant("secreto.png", "clave: hunter2");
+        let markdown = format!("![x]({})\n", secret.display());
+        let typst = body_in(&markdown, note.folder());
+        assert!(!typst.contains("#image"), "{typst}");
+        assert!(typst.contains("fuera de la carpeta"), "{typst}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_the_note_pointing_outside_becomes_a_marker() {
+        // The one case the compiler does *not* catch for us, measured against
+        // the real 0.15.1 CLI: `typst compile --root .` refuses a `..` that
+        // escapes the root and refuses an absolute path, but it *follows* a
+        // symlink that sits inside it. `ln -s /etc/passwd nota/atajo` plus
+        // `![x](atajo)` is a real read, and this check is what closes it.
+        let note = Note::new("symlink");
+        let secret = note.plant("secreto.png", "clave: hunter2");
+        std::os::unix::fs::symlink(&secret, note.folder().join("atajo.png")).unwrap();
+        let typst = body_in("![x](atajo.png)\n", note.folder());
+        assert!(!typst.contains("#image"), "{typst}");
+        assert!(typst.contains("fuera de la carpeta"), "{typst}");
+    }
+
+    #[test]
+    fn a_dotdot_that_lands_back_inside_the_note_folder_is_emitted() {
+        // Judged by where it lands, not by having a `..` in it. Rejecting the
+        // spelling instead of the resolved path would lose a legitimate image
+        // for no gain — the path it reaches is inside the folder.
+        let note = Note::new("midpath");
+        note.write("img/foto.png", "x");
+        assert_eq!(
+            body_in("![x](img/../img/foto.png)\n", note.folder()),
+            r#"#image("img/../img/foto.png")"#
+        );
+    }
+
+    #[test]
+    fn a_path_that_is_a_directory_becomes_a_marker() {
+        // A directory resolves and is inside the folder, and `#image` on it is
+        // still a compile error — the same "no PDF at all" as a missing file.
+        let note = Note::new("directory");
+        note.write("carpeta/dentro.txt", "x");
+        let typst = body_in("![x](carpeta)\n", note.folder());
+        assert!(!typst.contains("#image"), "{typst}");
+        assert!(typst.contains("no es un archivo"), "{typst}");
+    }
+
+    #[test]
+    fn a_note_folder_that_does_not_exist_leaves_every_image_a_marker() {
+        // Fail closed. With no folder there is nothing to check a path against,
+        // so nothing is emitted — and it is the same thing the wasm build does,
+        // where there is no filesystem to ask.
+        let missing = std::env::temp_dir().join("codedocs-typst-carpeta-que-no-existe");
+        let typst = body_in("![x](foto.png)\n", &missing);
+        assert!(!typst.contains("#image"), "{typst}");
+        assert!(typst.contains("foto.png"), "{typst}");
+    }
+
+    #[test]
+    fn a_marker_cannot_be_escaped_from_the_path_it_names() {
+        // The marker is the one new place document text lands inside a Typst
+        // content block, so the property the whole module rests on applies to
+        // it too: a `]` in the path must not end the block, and a `#` must not
+        // open a code expression — which in Typst can read a file.
+        let note = Note::new("marker-escape");
+        let typst = body_in("![x](<a]b#read(\"/etc/passwd\").png>)\n", note.folder());
+        assert!(typst.contains("\\]"), "{typst}");
+        assert!(typst.contains("\\#"), "{typst}");
+        // Exactly one `#` that is not escaped: the one in the `#emph` we wrote.
+        // Any other would be an expression the document opened, and `#read` can
+        // read a file.
+        let unescaped = |needle: char| {
+            typst
+                .char_indices()
+                .filter(|(at, c)| *c == needle && !typst[..*at].ends_with('\\'))
+                .count()
+        };
+        assert_eq!(unescaped('#'), 1, "{typst}");
+        // And exactly one bracket that actually closes a block: the marker's own.
+        // The path's `]` is escaped, so it cannot end the block early and leave
+        // the rest of the path as markup outside it.
+        assert_eq!(unescaped(']'), 1, "{typst}");
     }
 
     #[test]
@@ -1213,7 +1608,9 @@ mod tests {
 
     #[test]
     fn an_image_does_not_repeat_its_alt_text() {
-        let typst = body("![pie](./a.png)\n");
+        let note = Note::new("alt");
+        note.write("a.png", "x");
+        let typst = body_in("![pie](./a.png)\n", note.folder());
         assert_eq!(typst.matches("pie").count(), 0, "{typst}");
     }
 
@@ -1349,8 +1746,10 @@ mod tests {
     #[test]
     fn no_document_text_lands_inside_a_string_literal() {
         // The property that keeps a Typst breakout from being a file read. The
-        // only strings in the output are URLs, and they are scheme-checked, so
-        // a payload in prose or in code must stay markup.
+        // only strings in the output are a link's scheme-checked URL and an
+        // image's path — and a path only reaches a string once it has resolved
+        // to a file inside the note's own folder. A payload in prose or in code
+        // must stay markup.
         for md in [
             "```\n#read(\"/etc/passwd\")\n```\n",
             "`code #read(\"/etc/passwd\")`\n",

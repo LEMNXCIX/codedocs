@@ -331,7 +331,7 @@ pub async fn export_pdf(
 ) -> Result<(), String> {
     let compiler = ensure_compiler().await?;
     let source = note_folder.join(source_file_name());
-    let typst = codedocs_core::markdown_to_typst(content);
+    let typst = codedocs_core::markdown_to_typst(content, note_folder);
 
     // Held across the whole write-compile-remove, because the source file has a
     // fixed name: two exports in flight would otherwise write over each other's
@@ -763,7 +763,7 @@ mod tests {
         let markdown = "# Informe\n\nTexto con **negrita** y $E = mc^2$.\n\n- uno\n- dos\n";
 
         fs::write(dir.join("nota.md"), markdown).unwrap();
-        let typst = codedocs_core::markdown_to_typst(markdown);
+        let typst = codedocs_core::markdown_to_typst(markdown, &dir);
         let source = dir.join(source_file_name());
         fs::write(&source, &typst).unwrap();
 
@@ -784,6 +784,64 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[tokio::test]
+    async fn un_markdown_con_una_imagen_rota_aun_asienta_un_pdf_real() {
+        let Some(compiler) = real_compiler() else {
+            eprintln!("SKIPPED: broken image export. Set CODEDOCS_TYPST_BIN.");
+            return;
+        };
+        // One export at a time: see `export_lock`.
+        let _serialised = export_lock();
+
+        let dir = scratch("e2e-rota");
+        let destination = dir.join("salida.pdf");
+        // One image that is there and one that is not, so this is the whole
+        // round trip rather than a document that only mentions a missing file.
+        fs::write(dir.join("presente.svg"), SVG).unwrap();
+        let markdown = "# Informe\n\nAntes.\n\n![la que esta](presente.svg)\n\n\
+                        ![la que falta](rota.png)\n\nDespués.\n";
+
+        // The check happens here, where the `.typ` is generated — the compiler
+        // is never handed a path it would have to resolve.
+        let typst = codedocs_core::markdown_to_typst(markdown, &dir);
+        assert!(
+            typst.contains(r#"#image("presente.svg")"#),
+            "the image that is there should still be there: {typst}"
+        );
+        assert!(
+            !typst.contains("#image(\"rota.png\")"),
+            "the missing image is still a reference: {typst}"
+        );
+        assert!(
+            typst.contains("rota.png"),
+            "the reader should be told what was missing: {typst}"
+        );
+        let source = dir.join(source_file_name());
+        fs::write(&source, &typst).unwrap();
+
+        // Before the check this was the whole failure: one unresolvable
+        // `#image` and `typst compile` exits non-zero having written nothing, so
+        // the export produced no file and the user was told "exporting does not
+        // work" instead of "this picture is missing".
+        compile(&compiler, &source, &dir, &destination).expect("el PDF tiene que salir igual");
+
+        let bytes = fs::read(&destination).expect("the compiler wrote a file");
+        assert!(
+            looks_like_pdf(&bytes),
+            "the export is not a PDF: {} bytes",
+            bytes.len()
+        );
+        assert!(
+            bytes.len() > 1000,
+            "the PDF is suspiciously small: {}",
+            bytes.len()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A real image, as a string, so the fixture needs no binary file.
+    const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20" viewBox="0 0 40 20"><rect width="40" height="20" fill="#3366cc"/></svg>"##;
 
     #[tokio::test]
     async fn a_compile_error_names_the_line() {
